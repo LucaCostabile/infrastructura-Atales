@@ -56,17 +56,10 @@ build_image() {
   docker build -t $1:local -f $2/Dockerfile $2
 }
 
-# Construir auth-service
-echo -e "${GREEN}📦 Construyendo auth-service...${NC}"
-(cd ../proyecto-Atales/backend && docker build -t auth-service:local -f auth-service/Dockerfile .)
-
-# Construir business-service
-echo -e "${GREEN}📦 Construyendo business-service...${NC}"
-(cd ../proyecto-Atales/backend && docker build -t business-service:local -f negocio-service/Dockerfile .)
-
-# Construir api-gateway
-echo -e "${GREEN}📦 Construyendo api-gateway...${NC}"
-docker build -t api-gateway:local -f ../proyecto-Atales/backend/api-gateway/Dockerfile ../proyecto-Atales/backend/api-gateway
+build_image "api-gateway" "../proyecto-Atales/backend/api-gateway"
+build_image "auth-service" "../proyecto-Atales/backend/auth-service"
+build_image "business-service" "../proyecto-Atales/backend/negocio-service"
+build_image "frontend-atales" "../proyecto-Atales/frontend"
 
 # --------------------------------------------
 # 4. CERT-MANAGER

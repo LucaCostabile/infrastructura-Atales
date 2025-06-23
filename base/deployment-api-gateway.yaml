@@ -36,16 +36,37 @@ spec:
             requests:
               memory: "128Mi"
               cpu: "100m"
+          # Probes optimizadas
           livenessProbe:
             httpGet:
               path: /api/health
               port: 3000
+              httpHeaders:
+              - name: User-Agent
+                value: kube-probe/liveness
             initialDelaySeconds: 30
             periodSeconds: 15
+            timeoutSeconds: 5        # Aumentado de 1s a 5s
+            failureThreshold: 3
+            successThreshold: 1
           readinessProbe:
             httpGet:
               path: /api/health
               port: 3000
+              httpHeaders:
+              - name: User-Agent
+                value: kube-probe/readiness
             initialDelaySeconds: 10
             periodSeconds: 10
+            timeoutSeconds: 5        # Aumentado de 1s a 5s
+            failureThreshold: 3
+            successThreshold: 1
+          # Variables de entorno opcionales
+          env:
+          - name: NODE_ENV
+            value: "production"
+          - name: AUTH_SERVICE_PORT
+            value: "3001"
+          - name: BUSINESS_SERVICE_PORT
+            value: "3002"
       restartPolicy: Always
