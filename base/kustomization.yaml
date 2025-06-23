@@ -1,11 +1,14 @@
 resources:
-  - deployment-backend.yaml
+  - deployment-api-gateway.yaml
+  - deployment-auth-service.yaml
+  - deployment-business-service.yaml
+  - service-api-gateway.yaml
+  - service-auth-service.yaml
+  - service-business-service.yaml
   - deployment-frontend.yaml
   - deployment-mysql.yaml
-  - service-backend.yaml
   - service-frontend.yaml
   - service-mysql.yaml
   - pvc-mysql.yaml
-  - secret-backend.yaml
   - configmap-backend.yaml
   - hpa-backend.yaml
