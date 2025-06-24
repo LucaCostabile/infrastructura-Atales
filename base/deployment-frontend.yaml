@@ -2,53 +2,40 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: dev
-  labels:
-    app: frontend
 spec:
   replicas: 1
   selector:
     matchLabels:
       app: frontend
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
   template:
     metadata:
       labels:
         app: frontend
     spec:
       containers:
-        - name: frontend
-          image: frontend-atales:local
-          imagePullPolicy: Never
-          ports:
-            - containerPort: 80
-              name: http
-          resources:
-            limits:
-              memory: "128Mi"
-              cpu: "100m"
-            requests:
-              memory: "64Mi"
-              cpu: "50m"
-          # Usar health check específico
-          livenessProbe:
-            httpGet:
-              path: /health
-              port: 80
-            initialDelaySeconds: 15
-            periodSeconds: 20
-            timeoutSeconds: 5
-            failureThreshold: 3
-          readinessProbe:
-            httpGet:
-              path: /health
-              port: 80
-            initialDelaySeconds: 5
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-      restartPolicy: Always
+      - name: frontend
+        image: frontend-atales:local
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80
+        - containerPort: 443
+        volumeMounts:
+        - name: ssl-certs
+          mountPath: /etc/nginx/ssl
+          readOnly: true
+        resources:
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+          requests:
+            memory: "128Mi"
+            cpu: "250m"
+      volumes:
+      - name: ssl-certs
+        secret:
+          secretName: frontend-ssl-certs
+          items:
+            - key: tls.crt
+              path: atales.crt
+            - key: tls.key
+              path: atales.key

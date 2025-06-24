@@ -19,7 +19,10 @@ spec:
           image: mysql:8.0
           env:
             - name: MYSQL_ROOT_PASSWORD
-              value: "root"
+              valueFrom:
+                secretKeyRef:
+                  name: backend-secrets
+                  key: DB_PASSWORD
             - name: MYSQL_DATABASE
               value: "atalesdb"
             - name: MYSQL_USER
@@ -32,31 +35,11 @@ spec:
                 secretKeyRef:
                   name: backend-secrets
                   key: DB_PASSWORD
-            - name: MYSQL_INITDB_SKIP_TZINFO
-              value: "1"
           ports:
             - containerPort: 3306
           volumeMounts:
             - name: mysql-storage
               mountPath: /var/lib/mysql
-          startupProbe:
-            exec:
-              command: ["mysql", "-u", "root", "-proot", "-e", "SELECT 1"]
-            initialDelaySeconds: 20
-            periodSeconds: 10
-            failureThreshold: 30
-          livenessProbe:
-            exec:
-              command: ["mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot"]
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 5
-          readinessProbe:
-            exec:
-              command: ["mysql", "-u", "root", "-proot", "-e", "SELECT 1"]
-            initialDelaySeconds: 30
-            periodSeconds: 5
-            timeoutSeconds: 5
       volumes:
         - name: mysql-storage
           persistentVolumeClaim:

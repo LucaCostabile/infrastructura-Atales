@@ -2,15 +2,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend-service
-  namespace: dev
-  labels:
-    app: frontend
 spec:
-  type: NodePort  # Cambio de LoadBalancer a NodePort para Minikube
+  type: NodePort
   selector:
     app: frontend
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 80
-      nodePort: 30080  # Puerto específico para acceso externo
-      protocol: TCP
+      nodePort: 30080  # Puerto accesible externamente
