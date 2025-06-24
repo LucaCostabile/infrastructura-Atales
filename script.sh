@@ -71,7 +71,17 @@ if ! kubectl get ns cert-manager &> /dev/null; then
 fi
 
 # --------------------------------------------
-# 5. DESPLIEGUE EN ORDEN CORRECTO
+# 5. INSTALACIÓN ESO
+# --------------------------------------------
+echo -e "${BLUE}\n🔐 Instalando External Secrets Operator...${NC}"
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo update
+helm upgrade --install external-secrets external-secrets/external-secrets \
+  --namespace external-secrets --create-namespace
+echo -e "${GREEN}✅ External Secrets Operator instalado${NC}"
+
+# --------------------------------------------
+# 6. DESPLIEGUE EN ORDEN CORRECTO
 # --------------------------------------------
 echo -e "${GREEN}\n🚀 INICIANDO DESPLIEGUE KUBERNETES${NC}"
 
@@ -106,34 +116,32 @@ echo -e "${BLUE}\n🌐 Aplicando configuración completa...${NC}"
 kubectl apply -k overlays/dev -n dev
 
 # --------------------------------------------
-# 6. VERIFICACIÓN FINAL
+# 7. VERIFICACIÓN FINAL
 # --------------------------------------------
 echo -e "${BLUE}\n⏳ Esperando a que todos los servicios estén listos...${NC}"
 
-# Función mejorada para esperar deployments
 wait_for_deployment() {
   local deployment=$1
   local timeout=180
   local start_time=$(date +%s)
-  
+
   while :; do
     current_status=$(kubectl get deployment/$deployment -n dev -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
     [[ "$current_status" == "True" ]] && break
-    
+
     current_time=$(date +%s)
     elapsed=$((current_time - start_time))
-    
+
     if ((elapsed >= timeout)); then
       echo -e "${RED}❌ Timeout esperando por $deployment${NC}"
       kubectl describe deployment/$deployment -n dev
       exit 1
     fi
-    
+
     sleep 5
   done
 }
 
-# Esperar por cada deployment
 deployments=("api-gateway" "auth-service" "business-service" "frontend")
 for dep in "${deployments[@]}"; do
   wait_for_deployment $dep
