@@ -145,8 +145,8 @@ kubectl get all,ingress,pvc -n dev
 
 # URLs de acceso
 echo -e "${GREEN}\n🌍 URLs DE ACCESO:${NC}"
-echo -e "  - Frontend:    ${BLUE}http://atales.local${NC}"
-echo -e "  - API Gateway: ${BLUE}http://atales.local/api/health${NC}"
+echo -e "  - Frontend:    ${BLUE}https://atales.local${NC}"
+echo -e "  - API Gateway: ${BLUE}https://atales.local/api/health${NC}"
 
 echo -e "${YELLOW}\n🔌 Para exponer los servicios ejecuta en otra terminal:${NC}"
 echo -e "  minikube tunnel"
