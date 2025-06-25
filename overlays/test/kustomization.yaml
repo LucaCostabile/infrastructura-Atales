@@ -2,6 +2,7 @@ namespace: test
 
 resources:
   - ../../base
+  - ../../base/external-secrets
   - namespace.yaml
 
 patchesStrategicMerge:

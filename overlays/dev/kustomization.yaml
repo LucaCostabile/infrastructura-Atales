@@ -2,6 +2,7 @@ namespace: dev
 
 resources:
   - ../../base
+  - ../../base/external-secrets
   - namespace.yaml
   - ingress.yaml
   - frontend-ssl-secret.yaml
