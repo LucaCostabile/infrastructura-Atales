@@ -28,9 +28,24 @@ spec:
         - name: external-secrets
           image: ghcr.io/external-secrets/external-secrets:v0.9.11
           args:
-            - --metrics-enabled
-            - --cluster-sync-period=5m
+            - --metrics-addr=:8080  # Cambiado de --metrics-enabled
+            - --enable-cluster-store-reconciler=true  # Cambiado de --cluster-sync-period
+            - --loglevel=info  # Opcional: para mejor debugging
           env:
             - name: VAULT_ADDR
               value: "https://api.cloud.hashicorp.com/secrets/2023-11-28"
+          ports:
+            - containerPort: 8080
+              name: metrics
+          resources:
+            limits:
+              cpu: 100m
+              memory: 128Mi
+            requests:
+              cpu: 50m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
           imagePullPolicy: IfNotPresent
