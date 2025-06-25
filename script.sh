@@ -72,7 +72,11 @@ echo -e "${BLUE}\n🔐 Instalando External Secrets Operator...${NC}"
 
 if ! kubectl get crd externalsecrets.external-secrets.io > /dev/null 2>&1; then
   echo -e "${YELLOW}🟡 Instalando CRDs de External Secrets...${NC}"
+  
+  # Instalar los CRDs desde el repositorio oficial
   kubectl apply -f https://raw.githubusercontent.com/external-secrets/external-secrets/main/deploy/crds/bundle.yaml
+  
+  # Esperar a que los CRDs estén disponibles
   echo -e "${YELLOW}⏳ Esperando a que los CRDs estén listos...${NC}"
   while ! kubectl get crd externalsecrets.external-secrets.io > /dev/null 2>&1; do
     echo -n "."
