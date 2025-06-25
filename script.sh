@@ -6,6 +6,7 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m'
 
 echo -e "${GREEN}\n🌐 INICIANDO ENTORNO GITOPS PURO${NC}"
@@ -38,7 +39,7 @@ else
 fi
 
 # --------------------------------------------
-# 3. INSTALAR ARGOCd
+# 3. INSTALAR ARGOCD
 # --------------------------------------------
 echo -e "${BLUE}\n🛠️ Verificando instalación de ArgoCD...${NC}"
 if ! kubectl get ns argocd > /dev/null 2>&1; then
@@ -50,24 +51,68 @@ else
 fi
 
 # --------------------------------------------
-# 4. ESPERAR A QUE ARGOCd ESTÉ LISTO
+# 4. ESPERAR A QUE ARGOCD ESTÉ LISTO
 # --------------------------------------------
 echo -e "${BLUE}\n⏳ Esperando que ArgoCD esté listo...${NC}"
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
 # --------------------------------------------
-# 5. APLICAR APLICACIONES ARGOCD (GitOps)
+# 5. APLICAR APLICACIONES ARGOCD (GitOps) - SOLO EXTERNAL SECRETS OPERATOR PRIMERO
 # --------------------------------------------
-echo -e "${BLUE}\n🚀 Desplegando aplicaciones con GitOps...${NC}"
-
-echo -e "${YELLOW}📦 Aplicando External Secrets (Helm + Config)...${NC}"
+echo -e "${BLUE}\n🚀 Desplegando External Secrets Operator...${NC}"
 kubectl apply -f argo-apps/external-secrets-app.yaml -n argocd
 
+# --------------------------------------------
+# 6. ESPERAR A QUE LOS CRDs DE EXTERNAL SECRETS ESTÉN DISPONIBLES
+# --------------------------------------------
+echo -e "${BLUE}\n⏳ Esperando que External Secrets Operator instale los CRDs...${NC}"
+echo -e "${YELLOW}Esto puede tomar hasta 3 minutos...${NC}"
+
+# Función para verificar si los CRDs están disponibles
+check_crds() {
+    kubectl get crd clustersecretstores.external-secrets.io > /dev/null 2>&1 && \
+    kubectl get crd externalsecrets.external-secrets.io > /dev/null 2>&1
+}
+
+# Esperar hasta 3 minutos por los CRDs
+TIMEOUT=180
+COUNTER=0
+while ! check_crds && [ $COUNTER -lt $TIMEOUT ]; do
+    echo -e "${YELLOW}⏳ Esperando CRDs... (${COUNTER}/${TIMEOUT}s)${NC}"
+    sleep 5
+    COUNTER=$((COUNTER + 5))
+done
+
+if check_crds; then
+    echo -e "${GREEN}✅ CRDs de External Secrets están disponibles${NC}"
+else
+    echo -e "${RED}❌ Error: CRDs no disponibles después de 3 minutos${NC}"
+    echo -e "${YELLOW}Verificando estado de External Secrets Operator...${NC}"
+    kubectl get pods -n external-secrets
+    exit 1
+fi
+
+# --------------------------------------------
+# 7. ESPERAR A QUE EL OPERADOR ESTÉ LISTO
+# --------------------------------------------
+echo -e "${BLUE}\n⏳ Esperando que External Secrets Operator esté listo...${NC}"
+kubectl wait --for=condition=available --timeout=180s deployment/external-secrets-operator -n external-secrets
+
+# --------------------------------------------
+# 8. AHORA SÍ, APLICAR LA CONFIGURACIÓN DE EXTERNAL SECRETS
+# --------------------------------------------
+echo -e "${BLUE}\n🔧 Aplicando configuraciones de External Secrets...${NC}"
+# La aplicación external-secrets-config ya fue creada, solo necesitamos sincronizarla
+kubectl patch application external-secrets-config -n argocd --type merge -p '{"operation":{"initiatedBy":{"username":"script"},"sync":{"revision":"HEAD"}}}'
+
+# --------------------------------------------
+# 9. APLICAR ATALES-DEV
+# --------------------------------------------
 echo -e "${YELLOW}📦 Aplicando Atales-Dev...${NC}"
 kubectl apply -f argo-apps/atales-dev-app.yaml -n argocd
 
 # --------------------------------------------
-# 6. CONFIGURAR PORT-FORWARD
+# 10. CONFIGURAR PORT-FORWARD
 # --------------------------------------------
 echo -e "${YELLOW}\n🚪 Habilitando acceso a ArgoCD en https://localhost:8080 ...${NC}"
 kubectl port-forward svc/argocd-server -n argocd 8080:443 &
@@ -78,7 +123,7 @@ echo -e "${GREEN}\n🔑 Contraseña ArgoCD (usuario: admin):${NC}"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 # --------------------------------------------
-# 7. MONITOREO DE APLICACIONES
+# 11. MONITOREO DE APLICACIONES
 # --------------------------------------------
 echo -e "${BLUE}\n📊 Monitoreando sincronización de aplicaciones...${NC}"
 echo -e "${YELLOW}Esto puede tomar unos minutos...${NC}"
@@ -104,7 +149,16 @@ for i in {1..24}; do
 done
 
 # --------------------------------------------
-# 8. MENSAJE FINAL
+# 12. VERIFICACIÓN FINAL
+# --------------------------------------------
+echo -e "${BLUE}\n🔍 Verificación final de recursos...${NC}"
+echo -e "${YELLOW}External Secrets:${NC}"
+kubectl get externalsecrets -n external-secrets 2>/dev/null || echo "  No ExternalSecrets encontrados aún"
+echo -e "${YELLOW}ClusterSecretStores:${NC}"
+kubectl get clustersecretstores 2>/dev/null || echo "  No ClusterSecretStores encontrados aún"
+
+# --------------------------------------------
+# 13. MENSAJE FINAL
 # --------------------------------------------
 echo -e "${GREEN}\n🚀 GITOPS CONFIGURADO EXITOSAMENTE${NC}"
 echo -e "${GREEN}\n💡 Todo está siendo manejado por ArgoCD:${NC}"

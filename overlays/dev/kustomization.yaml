@@ -2,7 +2,7 @@ namespace: dev
 
 resources:
   - ../../base
-  - ../../apps/external-secrets
+  - ../../apps/external-secrets-config
 
   - ingress.yaml
 
