@@ -4,5 +4,6 @@ namespace: external-secrets
 
 resources:
   - eso-install.yaml
-  - clustersecretstore.yaml 
+  - service-account.yaml  # Nuevo archivo con el ServiceAccount
+  - clustersecretstore.yaml
   - vault-auth-secret.yaml
