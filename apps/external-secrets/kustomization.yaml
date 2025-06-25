@@ -4,6 +4,5 @@ namespace: external-secrets
 
 resources:
   - eso-install.yaml
-  - secretstore.yaml
+  - clustersecretstore.yaml 
   - vault-auth-secret.yaml
-  - backend-external-secret.yaml
