@@ -3,7 +3,6 @@ namespace: dev
 resources:
   - ../../base
   - ../../base/external-secrets
-  - namespace.yaml
   - ingress.yaml
 
 patchesStrategicMerge:
