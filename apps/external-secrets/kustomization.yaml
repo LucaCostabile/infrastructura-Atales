@@ -7,3 +7,4 @@ resources:
   - service-account.yaml  # Nuevo archivo con el ServiceAccount
   - clustersecretstore.yaml
   - vault-auth-secret.yaml
+  - backend-external-secret.yaml
