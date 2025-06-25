@@ -3,11 +3,6 @@ kind: Namespace
 metadata:
   name: external-secrets
 ---
-apiVersion: apiextensions.k8s.io/v1
-kind: CustomResourceDefinition
-metadata:
-  name: clustersecretstores.external-secrets.io
----
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -28,9 +23,9 @@ spec:
         - name: external-secrets
           image: ghcr.io/external-secrets/external-secrets:v0.9.11
           args:
-            - --metrics-addr=:8080  # Cambiado de --metrics-enabled
-            - --enable-cluster-store-reconciler=true  # Cambiado de --cluster-sync-period
-            - --loglevel=info  # Opcional: para mejor debugging
+            - --metrics-addr=:8080
+            - --enable-cluster-store-reconciler=true
+            - --loglevel=info
           env:
             - name: VAULT_ADDR
               value: "https://api.cloud.hashicorp.com/secrets/2023-11-28"
