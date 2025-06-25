@@ -17,7 +17,7 @@ spec:
       containers:
         - name: business-service
           image: luca011/negocio-service-atales:dev-latest
-          imagePullPolicy: Never
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3002
               name: http
