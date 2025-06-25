@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 🚀 Script para inicializar entorno local GitOps con ArgoCD
+# 🚀 Script para inicializar entorno con Minikube + ArgoCD + App of Apps
 
 set -e
 
@@ -27,7 +27,7 @@ else
 fi
 
 # --------------------------------------------
-# 2. CONFIGURAR /etc/hosts (si usás ingress)
+# 2. CONFIGURAR /etc/hosts (para dominio local)
 # --------------------------------------------
 MINIKUBE_IP=$(minikube ip)
 DOMAIN="atales.local"
@@ -54,9 +54,27 @@ else
 fi
 
 # --------------------------------------------
-# 4. CONFIGURAR ACCESO A ARGOCd
+# 4. ESPERAR A QUE ARGOCd ESTÉ LISTO
 # --------------------------------------------
-echo -e "${YELLOW}\n🚪 Accediendo a la UI de ArgoCD en https://localhost:8080 ...${NC}"
+echo -e "${BLUE}\n⏳ Esperando que ArgoCD esté listo...${NC}"
+
+while [[ $(kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o 'jsonpath={.items[*].status.containerStatuses[*].ready}') != "true" ]]; do
+    echo -n "."
+    sleep 5
+done
+
+echo -e "\n${GREEN}✅ ArgoCD está listo${NC}"
+
+# --------------------------------------------
+# 5. APLICAR APP RAÍZ (APP OF APPS)
+# --------------------------------------------
+echo -e "${BLUE}\n🚀 Aplicando App raíz (App of Apps)...${NC}"
+kubectl apply -f argo-apps/root/root-app.yaml -n argocd
+
+# --------------------------------------------
+# 6. CONFIGURAR PORT-FORWARD PARA ARGOCd
+# --------------------------------------------
+echo -e "${YELLOW}\n🚪 Habilitando acceso a la UI de ArgoCD en https://localhost:8080 ...${NC}"
 kubectl port-forward svc/argocd-server -n argocd 8080:443 &
 
 sleep 5
@@ -67,13 +85,13 @@ echo -e "${GREEN}\n🔑 Contraseña inicial de ArgoCD (usuario: admin):${NC}"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 # --------------------------------------------
-# 5. MENSAJE FINAL
+# 7. MENSAJE FINAL
 # --------------------------------------------
-echo -e "${GREEN}\n🚀 ENTORNO LISTO PARA QUE ARGOCd SE ENCARGUE DEL DESPLIEGUE${NC}"
+echo -e "${GREEN}\n🚀 ENTORNO COMPLETAMENTE LEVANTADO CON GITOPS${NC}"
 echo -e "${GREEN}\n💡 Pasos siguientes:${NC}"
 echo -e "${YELLOW}👉 Entrá a la UI de ArgoCD: https://localhost:8080${NC}"
 echo -e "${YELLOW}👉 Usuario: admin${NC}"
 echo -e "${YELLOW}👉 Contraseña: (la que te mostré arriba)${NC}"
-echo -e "${YELLOW}👉 Sincronizá las apps desde el folder argo-apps (manual o automático)${NC}"
-echo -e "${YELLOW}👉 No olvides correr: minikube tunnel (si usás ingress con LoadBalancer)${NC}"
+echo -e "${YELLOW}👉 ArgoCD está desplegando automáticamente External Secrets y Atales-Dev${NC}"
+echo -e "${YELLOW}👉 No olvides correr: ${BLUE}minikube tunnel${YELLOW} (si usás ingress con LoadBalancer)${NC}"
 
