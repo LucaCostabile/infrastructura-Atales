@@ -6,6 +6,3 @@ resources:
 
   - ingress.yaml
 
-
-patchesStrategicMerge:
-  - configmap-backend.yaml
