@@ -1,5 +1,0 @@
-resources:
-  - eso-install.yaml
-  - secretstore.yaml
-  - vault-auth-secret.yaml
-  - backend-external-secret.yaml
