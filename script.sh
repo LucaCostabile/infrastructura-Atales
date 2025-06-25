@@ -1,163 +1,121 @@
 #!/bin/bash
 
-# 🚀 Script de Despliegue Local Optimizado - Versión Final
+# 🚀 Script para iniciar Minikube, instalar ArgoCD y desplegar External-Secrets + Atales-Dev
+
 set -e
 
-# 🎨 Colores para mensajes
+# 🎨 Colores
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo -e "${GREEN}\n🌐 INICIANDO DESPLIEGUE EN MINIKUBE${NC}"
+echo -e "${GREEN}\n🌐 INICIANDO ENTORNO LOCAL CON MINIKUBE + ARGOCD${NC}"
 
 # --------------------------------------------
-# 1. CONFIGURACIÓN INICIAL
+# 1. INICIAR MINIKUBE
 # --------------------------------------------
 echo -e "${BLUE}\n🔍 Verificando Minikube...${NC}"
 if ! minikube status > /dev/null 2>&1; then
-  echo -e "${YELLOW}🟡 Iniciando Minikube (3 CPUs, 4500MB RAM)...${NC}"
+  echo -e "${YELLOW}🟡 Iniciando Minikube...${NC}"
   minikube start --cpus=3 --memory=4500mb --driver=docker \
-    --extra-config=kubelet.housekeeping-interval=10s \
-    --extra-config=kubelet.max-pods=50
+    --addons=ingress,metrics-server,dashboard \
+    --extra-config=kubelet.housekeeping-interval=10s
 else
-  echo -e "${GREEN}✅ Minikube ya está activo${NC}"
+  echo -e "${GREEN}✅ Minikube ya está corriendo${NC}"
 fi
 
-# Configurar Docker
-eval "$(minikube docker-env)"
-docker system prune -f
-echo -e "${GREEN}✅ Docker configurado${NC}"
-
 # --------------------------------------------
-# 2. CONFIGURACIÓN DE RED
+# 2. CONFIGURAR /etc/hosts
 # --------------------------------------------
 MINIKUBE_IP=$(minikube ip)
-echo -e "${GREEN}\n📌 IP de Minikube: ${BLUE}$MINIKUBE_IP${NC}"
+DOMAIN="atales.local"
+HOST_ENTRY="$MINIKUBE_IP $DOMAIN"
 
-HOST_ENTRY="$MINIKUBE_IP atales.local"
-if ! grep -q "atales.local" /etc/hosts; then
-  echo -e "${YELLOW}🔧 Actualizando /etc/hosts...${NC}"
+if ! grep -q "$DOMAIN" /etc/hosts; then
+  echo -e "${YELLOW}🔧 Agregando $DOMAIN a /etc/hosts...${NC}"
   echo "$HOST_ENTRY" | sudo tee -a /etc/hosts > /dev/null
-fi
-
-# Habilitar Ingress
-minikube addons enable ingress
-sleep 15
-
-# --------------------------------------------
-# 3. CONSTRUIR IMÁGENES
-# --------------------------------------------
-echo -e "${BLUE}\n🐳 Construyendo imágenes...${NC}"
-
-build_image() {
-  echo -e "${GREEN}📦 Construyendo $1...${NC}"
-  docker build -t $1:local -f $2/Dockerfile $2
-}
-
-build_image "api-gateway" "../proyecto-Atales/backend/api-gateway"
-build_image "auth-service" "../proyecto-Atales/backend/auth-service"
-build_image "business-service" "../proyecto-Atales/backend/negocio-service"
-build_image "frontend-atales" "../proyecto-Atales/frontend"
-
-# --------------------------------------------
-# 4. CERT-MANAGER
-# --------------------------------------------
-echo -e "${BLUE}\n🔐 Configurando cert-manager...${NC}"
-if ! kubectl get ns cert-manager &> /dev/null; then
-  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.14.3/cert-manager.yaml
-  kubectl wait --for=condition=Available apiservice v1.cert-manager.io --timeout=180s
+else
+  echo -e "${GREEN}✅ /etc/hosts ya contiene $DOMAIN${NC}"
 fi
 
 # --------------------------------------------
-# 5. INSTALACIÓN ESO
+# 3. INSTALAR ARGOCD (si no está)
+# --------------------------------------------
+echo -e "${BLUE}\n🛠️ Verificando instalación de ArgoCD...${NC}"
+
+if ! kubectl get ns argocd > /dev/null 2>&1; then
+  echo -e "${YELLOW}🟡 Instalando ArgoCD...${NC}"
+  kubectl create namespace argocd
+  kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+else
+  echo -e "${GREEN}✅ ArgoCD ya está instalado${NC}"
+fi
+
+# --------------------------------------------
+# 4. ESPERAR A QUE ARGOCD ESTÉ LISTO
+# --------------------------------------------
+echo -e "${BLUE}\n⏳ Esperando que ArgoCD esté listo...${NC}"
+
+while [[ $(kubectl get pods -n argocd -l app.kubernetes.io/name=argocd-server -o 'jsonpath={.items[*].status.containerStatuses[*].ready}') != "true" ]]; do
+    echo -n "."
+    sleep 5
+done
+
+echo -e "\n${GREEN}✅ ArgoCD está listo${NC}"
+
+# --------------------------------------------
+# 5. INSTALAR EXTERNAL SECRETS OPERATOR (CRDs)
 # --------------------------------------------
 echo -e "${BLUE}\n🔐 Instalando External Secrets Operator...${NC}"
-helm repo add external-secrets https://charts.external-secrets.io
-helm repo update
-helm upgrade --install external-secrets external-secrets/external-secrets \
-  --namespace external-secrets --create-namespace
-echo -e "${GREEN}✅ External Secrets Operator instalado${NC}"
 
-# --------------------------------------------
-# 6. DESPLIEGUE EN ORDEN CORRECTO
-# --------------------------------------------
-echo -e "${GREEN}\n🚀 INICIANDO DESPLIEGUE KUBERNETES${NC}"
-
-# Limpieza completa
-echo -e "${YELLOW}🧹 Limpiando namespace dev...${NC}"
-kubectl delete namespace dev --ignore-not-found=true
-kubectl create namespace dev
-
-# Paso 1: Secret
-echo -e "${BLUE}\n🔑 Aplicando secret...${NC}"
-kubectl apply -f overlays/dev/secret-backend.yaml -n dev
-
-# Paso 2: PVC para MySQL (con espera mejorada)
-echo -e "${BLUE}\n💾 Aplicando PVC para MySQL...${NC}"
-kubectl apply -f base/pvc-mysql.yaml -n dev
-
-# Espera mejorada para PVC
-echo -e "${YELLOW}⏳ Esperando a que el PVC esté Bound...${NC}"
-while [[ $(kubectl get pvc/mysql-pvc -n dev -o 'jsonpath={..status.phase}') != "Bound" ]]; do
-  sleep 5
-  echo -n "."
-done
-echo -e "\n${GREEN}✅ PVC listo${NC}"
-
-# Paso 3: MySQL
-echo -e "${BLUE}\n🗄️ Desplegando MySQL...${NC}"
-kubectl apply -f base/deployment-mysql.yaml -n dev
-kubectl wait --for=condition=Ready pod -n dev -l app=mysql --timeout=300s
-
-# Paso 4: Todo lo demás
-echo -e "${BLUE}\n🌐 Aplicando configuración completa...${NC}"
-kubectl apply -k overlays/dev -n dev
-
-# --------------------------------------------
-# 7. VERIFICACIÓN FINAL
-# --------------------------------------------
-echo -e "${BLUE}\n⏳ Esperando a que todos los servicios estén listos...${NC}"
-
-wait_for_deployment() {
-  local deployment=$1
-  local timeout=180
-  local start_time=$(date +%s)
-
-  while :; do
-    current_status=$(kubectl get deployment/$deployment -n dev -o jsonpath='{.status.conditions[?(@.type=="Available")].status}')
-    [[ "$current_status" == "True" ]] && break
-
-    current_time=$(date +%s)
-    elapsed=$((current_time - start_time))
-
-    if ((elapsed >= timeout)); then
-      echo -e "${RED}❌ Timeout esperando por $deployment${NC}"
-      kubectl describe deployment/$deployment -n dev
-      exit 1
-    fi
-
-    sleep 5
+if ! kubectl get crd externalsecrets.external-secrets.io > /dev/null 2>&1; then
+  echo -e "${YELLOW}🟡 Instalando CRDs de External Secrets...${NC}"
+  
+  # Instalar los CRDs desde el repositorio oficial
+  kubectl apply -f https://raw.githubusercontent.com/external-secrets/external-secrets/main/deploy/crds/bundle.yaml
+  
+  # Esperar a que los CRDs estén disponibles
+  echo -e "${YELLOW}⏳ Esperando a que los CRDs estén listos...${NC}"
+  while ! kubectl get crd externalsecrets.external-secrets.io > /dev/null 2>&1; do
+    echo -n "."
+    sleep 3
   done
-}
+  echo -e "\n${GREEN}✅ CRDs de External Secrets instalados correctamente${NC}"
+else
+  echo -e "${GREEN}✅ External Secrets Operator ya está instalado${NC}"
+fi
 
-deployments=("api-gateway" "auth-service" "business-service" "frontend")
-for dep in "${deployments[@]}"; do
-  wait_for_deployment $dep
-done
+# --------------------------------------------
+# 6. APLICAR LAS 2 APLICACIONES (external-secrets y atales-dev)
+# --------------------------------------------
+echo -e "${BLUE}\n🚀 Aplicando External-Secrets App...${NC}"
+kubectl apply -f argo-apps/external-secrets-app.yaml -n argocd
 
-# Estado final
-echo -e "${GREEN}\n📊 ESTADO FINAL DEL CLUSTER:${NC}"
-kubectl get all,ingress,pvc -n dev
+echo -e "${BLUE}\n🚀 Aplicando Atales-Dev App...${NC}"
+kubectl apply -f argo-apps/atales-dev-app.yaml -n argocd
 
-# URLs de acceso
-echo -e "${GREEN}\n🌍 URLs DE ACCESO:${NC}"
-echo -e "  - Frontend:    ${BLUE}https://atales.local${NC}"
-echo -e "  - API Gateway: ${BLUE}https://atales.local/api/health${NC}"
+# --------------------------------------------
+# 7. CONFIGURAR PORT-FORWARD PARA ARGOCD
+# --------------------------------------------
+echo -e "${YELLOW}\n🚪 Habilitando acceso a la UI de ArgoCD en https://localhost:8080 ...${NC}"
+kubectl port-forward svc/argocd-server -n argocd 8080:443 &
 
-echo -e "${YELLOW}\n🔌 Para exponer los servicios ejecuta en otra terminal:${NC}"
-echo -e "  minikube tunnel"
-echo -e "${YELLOW}💡 Presiona Ctrl+C para detener el tunnel cuando termines${NC}"
+sleep 5
+echo -e "${GREEN}✅ Port-forward listo${NC}"
 
-echo -e "${GREEN}\n🎉 ¡DESPLIEGUE COMPLETADO CON ÉXITO! 🎉${NC}"
+# Mostrar contraseña inicial
+echo -e "${GREEN}\n🔑 Contraseña inicial de ArgoCD (usuario: admin):${NC}"
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
+
+# --------------------------------------------
+# 8. MENSAJE FINAL
+# --------------------------------------------
+echo -e "${GREEN}\n🚀 ENTORNO COMPLETAMENTE LEVANTADO CON GITOPS${NC}"
+echo -e "${GREEN}\n💡 Pasos siguientes:${NC}"
+echo -e "${YELLOW}👉 Entrá a la UI de ArgoCD: https://localhost:8080${NC}"
+echo -e "${YELLOW}👉 Usuario: admin${NC}"
+echo -e "${YELLOW}👉 Contraseña: (la que te mostré arriba)${NC}"
+echo -e "${YELLOW}👉 ArgoCD está desplegando automáticamente External Secrets y Atales-Dev${NC}"
+echo -e "${YELLOW}👉 No olvides correr: ${BLUE}minikube tunnel${YELLOW} (si usás ingress con LoadBalancer)${NC}"
