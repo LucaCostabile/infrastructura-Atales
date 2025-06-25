@@ -1,5 +1,5 @@
 #!/bin/bash
-# 🚀 Script GitOps - Solo infraestructura base
+# 🚀 Script GitOps Puro - Solo infraestructura base
 set -e
 
 # 🎨 Colores
@@ -8,7 +8,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-echo -e "${GREEN}\n🌐 INICIANDO ENTORNO GITOPS CON MINIKUBE + ARGOCd${NC}"
+echo -e "${GREEN}\n🌐 INICIANDO ENTORNO GITOPS PURO${NC}"
 
 # --------------------------------------------
 # 1. INICIAR MINIKUBE
@@ -58,12 +58,12 @@ kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -
 # --------------------------------------------
 # 5. APLICAR APLICACIONES ARGOCD (GitOps)
 # --------------------------------------------
-echo -e "${BLUE}\n🚀 Aplicando aplicaciones ArgoCD...${NC}"
+echo -e "${BLUE}\n🚀 Desplegando aplicaciones con GitOps...${NC}"
 
-# Aplicar External Secrets (con Helm)
+echo -e "${YELLOW}📦 Aplicando External Secrets (Helm + Config)...${NC}"
 kubectl apply -f argo-apps/external-secrets-app.yaml -n argocd
 
-# Aplicar Atales-Dev
+echo -e "${YELLOW}📦 Aplicando Atales-Dev...${NC}"
 kubectl apply -f argo-apps/atales-dev-app.yaml -n argocd
 
 # --------------------------------------------
@@ -78,11 +78,39 @@ echo -e "${GREEN}\n🔑 Contraseña ArgoCD (usuario: admin):${NC}"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 # --------------------------------------------
-# 7. MENSAJE FINAL
+# 7. MONITOREO DE APLICACIONES
+# --------------------------------------------
+echo -e "${BLUE}\n📊 Monitoreando sincronización de aplicaciones...${NC}"
+echo -e "${YELLOW}Esto puede tomar unos minutos...${NC}"
+
+# Función para verificar estado de app
+check_app_status() {
+    local app_name=$1
+    local status=$(kubectl get application $app_name -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "NotFound")
+    local health=$(kubectl get application $app_name -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
+    echo "  $app_name: Sync=$status, Health=$health"
+}
+
+# Monitorear por 2 minutos
+for i in {1..24}; do
+    echo -e "\n${BLUE}Estado de aplicaciones (intento $i/24):${NC}"
+    check_app_status "external-secrets-operator"
+    check_app_status "external-secrets-config" 
+    check_app_status "atales-dev"
+    
+    if [[ $i -lt 24 ]]; then
+        sleep 5
+    fi
+done
+
+# --------------------------------------------
+# 8. MENSAJE FINAL
 # --------------------------------------------
 echo -e "${GREEN}\n🚀 GITOPS CONFIGURADO EXITOSAMENTE${NC}"
-echo -e "${GREEN}\n💡 ArgoCD está sincronizando automáticamente:${NC}"
-echo -e "${YELLOW}👉 External Secrets Operator + Configuraciones${NC}"
+echo -e "${GREEN}\n💡 Todo está siendo manejado por ArgoCD:${NC}"
+echo -e "${YELLOW}👉 External Secrets Operator (Helm Chart)${NC}"
+echo -e "${YELLOW}👉 External Secrets Configuraciones${NC}"
 echo -e "${YELLOW}👉 Atales-Dev Application${NC}"
 echo -e "${YELLOW}👉 UI ArgoCD: https://localhost:8080${NC}"
 echo -e "${YELLOW}👉 Usuario: admin | Contraseña: arriba ⬆️${NC}"
+echo -e "${GREEN}\n🎯 ¡A partir de ahora, solo necesitás hacer push al repo!${NC}"
