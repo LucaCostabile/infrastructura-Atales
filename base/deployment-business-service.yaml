@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: business-service
-          image: business-service:local
+          image: negocio-service-atales:latest
           imagePullPolicy: Never
           ports:
             - containerPort: 3002

@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: frontend-atales:local
+        image: frontend-atales:latest
         imagePullPolicy: Never
         ports:
         - containerPort: 80
