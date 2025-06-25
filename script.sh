@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 🚀 Script para inicializar entorno con Minikube + ArgoCD + App of Apps
+# 🚀 Script para iniciar Minikube, instalar ArgoCD y desplegar External-Secrets + Atales-Dev
 
 set -e
 
@@ -27,7 +27,7 @@ else
 fi
 
 # --------------------------------------------
-# 2. CONFIGURAR /etc/hosts (para dominio local)
+# 2. CONFIGURAR /etc/hosts
 # --------------------------------------------
 MINIKUBE_IP=$(minikube ip)
 DOMAIN="atales.local"
@@ -66,10 +66,13 @@ done
 echo -e "\n${GREEN}✅ ArgoCD está listo${NC}"
 
 # --------------------------------------------
-# 5. APLICAR APP RAÍZ (APP OF APPS)
+# 5. APLICAR LAS 2 APLICACIONES (external-secrets y atales-dev)
 # --------------------------------------------
-echo -e "${BLUE}\n🚀 Aplicando App raíz (App of Apps)...${NC}"
-kubectl apply -f argo-apps/root/root-app.yaml -n argocd
+echo -e "${BLUE}\n🚀 Aplicando External-Secrets App...${NC}"
+kubectl apply -f argo-apps/external-secrets-app.yaml -n argocd
+
+echo -e "${BLUE}\n🚀 Aplicando Atales-Dev App...${NC}"
+kubectl apply -f argo-apps/atales-dev-app.yaml -n argocd
 
 # --------------------------------------------
 # 6. CONFIGURAR PORT-FORWARD PARA ARGOCd
