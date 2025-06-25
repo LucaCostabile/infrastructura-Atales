@@ -3,13 +3,8 @@ kind: Kustomization
 namespace: external-secrets
 
 resources:
-  - eso-install.yaml       
-  - rbac.yaml             
-  - service-account.yaml   
+  - eso-install.yaml
+  - service-account.yaml  # Nuevo archivo con el ServiceAccount
+  - clustersecretstore.yaml
   - vault-auth-secret.yaml
-  - clustersecretstore.yaml 
-  - backend-external-secret.yaml 
-
-# Agregar ordenamiento para asegurar que el namespace se cree primero
-generatorOptions:
-  disableNameSuffixHash: true
+  - backend-external-secret.yaml
