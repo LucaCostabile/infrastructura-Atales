@@ -1,0 +1,5 @@
+resources:
+  - auth-sealed-secrets.yaml
+  - negocio-sealed-secrets.yaml
+  - gateway-sealed-secrets.yaml
+  - frontend-sealed-secrets.yaml
