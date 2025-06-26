@@ -1,6 +1,0 @@
-namespace: dev
-
-resources:
-  - ../../../base/frontend
-  - ingress.yaml
-

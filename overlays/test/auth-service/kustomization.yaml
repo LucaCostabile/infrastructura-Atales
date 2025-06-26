@@ -1,5 +1,0 @@
-namespace: test
-
-resources:
-  - ../../../base/auth-service
-

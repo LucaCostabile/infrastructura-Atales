@@ -1,4 +1,0 @@
-namespace: test
-
-resources:
-  - ../../../base/frontend

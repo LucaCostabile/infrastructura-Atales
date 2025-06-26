@@ -1,5 +1,0 @@
-resources:
-  - deployment-business-service.yaml
-  - service-business-service.yaml
-  - configmap-backend.yaml
-
