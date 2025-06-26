@@ -18,9 +18,12 @@ echo -e "${GREEN}\n🌥️ INICIANDO DESPLIEGUE EN AWS EKS - TEST${NC}"
 read -p "🔑 Ingrese DB_USER: " DB_USER
 read -s -p "🔑 Ingrese DB_PASSWORD: " DB_PASSWORD
 echo ""
-read -p "🔑 Ingrese DB_HOST (ej: atalesdb.xxxxx.rds.amazonaws.com): " DB_HOST
+
+# Hardcoded RDS endpoint
+DB_HOST="atalesdb.crxuvzgv6rwg.us-east-1.rds.amazonaws.com"
 
 echo -e "${GREEN}✅ Credenciales ingresadas${NC}"
+echo -e "${YELLOW}ℹ️  Usando RDS endpoint: ${DB_HOST}${NC}"
 
 # --------------------------------------------
 # 1. Verificar conexión al Cluster
@@ -121,12 +124,14 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.pas
 # --------------------------------------------
 # 9. Crear DB en RDS
 # --------------------------------------------
-echo -e "${BLUE}\n🗄️ Creando base de datos 'atalesdb' en RDS...${NC}"
+echo -e "${BLUE}\n🗄️ Verificando base de datos 'atalesdb' en RDS...${NC}"
 
-kubectl run mysql-client --rm -i --tty --image=mysql:8.0 --restart=Never -- bash -c \
-"mysql -h $DB_HOST -u$DB_USER -p$DB_PASSWORD -e 'CREATE DATABASE IF NOT EXISTS atalesdb;'"
-
-echo -e "${GREEN}✅ Base de datos 'atalesdb' verificada o creada${NC}"
+if kubectl run mysql-client --rm -i --tty --image=mysql:8.0 --restart=Never -- bash -c \
+"mysql -h $DB_HOST -u$DB_USER -p$DB_PASSWORD -e 'CREATE DATABASE IF NOT EXISTS atalesdb; SHOW DATABASES;'"; then
+  echo -e "${GREEN}✅ Base de datos 'atalesdb' verificada/creada en ${DB_HOST}${NC}"
+else
+  echo -e "${RED}❌ Error al conectar con la base de datos. Verifica las credenciales.${NC}"
+fi
 
 # --------------------------------------------
 # 10. Fin
@@ -134,5 +139,5 @@ echo -e "${GREEN}✅ Base de datos 'atalesdb' verificada o creada${NC}"
 echo -e "${GREEN}\n🚀 DESPLIEGUE COMPLETO EN EKS - TEST${NC}"
 echo -e "${GREEN}✅ Acceso frontend: http://atales.localaws${NC}"
 echo -e "${GREEN}✅ Acceso ArgoCD: https://localhost:8080${NC}"
+echo -e "${YELLOW}ℹ️  RDS endpoint: ${DB_HOST}${NC}"
 echo -e "${YELLOW}Para detener port-forward: kill $PORT_FORWARD_PID${NC}"
-
