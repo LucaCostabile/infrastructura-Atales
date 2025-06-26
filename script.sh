@@ -1,5 +1,5 @@
 #!/bin/bash
-# 🚀 Script GitOps Actualizado - Solo usa Secrets existentes
+# 🚀 Script GitOps Actualizado - Solo usa Secrets de DEV
 set -e
 
 # 🎨 Colores
@@ -9,7 +9,7 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${GREEN}\n🌐 INICIANDO ENTORNO GITOPS MULTI-APP + SEALED SECRETS${NC}"
+echo -e "${GREEN}\n🌐 INICIANDO ENTORNO GITOPS MULTI-APP + SEALED SECRETS (SOLO DEV)${NC}"
 
 # --------------------------------------------
 # 1. INICIAR MINIKUBE
@@ -79,17 +79,15 @@ else
 fi
 
 # --------------------------------------------
-# 5. CREAR NAMESPACES NECESARIOS
+# 5. CREAR NAMESPACE DEV
 # --------------------------------------------
-echo -e "${BLUE}\n📁 Creando Namespaces...${NC}"
-for ns in dev test prod; do
-  if ! kubectl get namespace $ns > /dev/null 2>&1; then
-    kubectl create namespace $ns
-    echo -e "${GREEN}✅ Namespace $ns creado${NC}"
-  else
-    echo -e "${GREEN}✅ Namespace $ns ya existe${NC}"
-  fi
-done
+echo -e "${BLUE}\n📁 Verificando namespace dev...${NC}"
+if ! kubectl get namespace dev > /dev/null 2>&1; then
+  kubectl create namespace dev
+  echo -e "${GREEN}✅ Namespace dev creado${NC}"
+else
+  echo -e "${GREEN}✅ Namespace dev ya existe${NC}"
+fi
 
 # --------------------------------------------
 # 6. VERIFICAR Y OBTENER CLAVE PÚBLICA
@@ -127,35 +125,31 @@ kubeseal --fetch-cert > sealed-secrets-cert.pem
 echo -e "${GREEN}✅ Clave pública guardada${NC}"
 
 # --------------------------------------------
-# 7. LIMPIAR SECRETS EXISTENTES
+# 7. LIMPIAR SECRETS EXISTENTES EN DEV
 # --------------------------------------------
 cleanup_existing_secrets() {
-  echo -e "${BLUE}\n🧹 Limpiando secrets existentes...${NC}"
+  echo -e "${BLUE}\n🧹 Limpiando secrets existentes en dev...${NC}"
   
   PROBLEMATIC_SECRETS=("backend-secrets" "gateway-secrets" "negocio-secrets" "frontend-tls")
   
-  for env in dev test prod; do
-    echo -e "${YELLOW}📁 Namespace: $env${NC}"
-    
-    for secret in "${PROBLEMATIC_SECRETS[@]}"; do
-      if kubectl get secret $secret -n $env >/dev/null 2>&1; then
-        OWNER=$(kubectl get secret $secret -n $env -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || echo "")
-        if [ "$OWNER" != "SealedSecret" ]; then
-          echo -e "${YELLOW}🗑️  Eliminando secret no manejado: $secret${NC}"
-          kubectl delete secret $secret -n $env
-        else
-          echo -e "${GREEN}✅ $secret manejado por SealedSecret${NC}"
-        fi
+  for secret in "${PROBLEMATIC_SECRETS[@]}"; do
+    if kubectl get secret $secret -n dev >/dev/null 2>&1; then
+      OWNER=$(kubectl get secret $secret -n dev -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || echo "")
+      if [ "$OWNER" != "SealedSecret" ]; then
+        echo -e "${YELLOW}🗑️  Eliminando secret no manejado: $secret${NC}"
+        kubectl delete secret $secret -n dev
+      else
+        echo -e "${GREEN}✅ $secret manejado por SealedSecret${NC}"
       fi
-    done
+    fi
   done
 }
 
 # --------------------------------------------
-# 8. VERIFICAR SECRETS EXISTENTES
+# 8. VERIFICAR SECRETS EXISTENTES SOLO EN DEV
 # --------------------------------------------
 verify_existing_secrets() {
-  echo -e "${BLUE}\n🔍 Verificando archivos Sealed Secrets existentes...${NC}"
+  echo -e "${BLUE}\n🔍 Verificando archivos Sealed Secrets en dev...${NC}"
   
   REQUIRED_SECRETS=(
     "auth-sealed-secrets.yaml"
@@ -164,36 +158,31 @@ verify_existing_secrets() {
     "negocio-sealed-secrets.yaml"
   )
   
-  for env in dev test prod; do
-    echo -e "${YELLOW}📦 Ambiente: $env${NC}"
-    
-    missing_secrets=0
-    
-    for secret_file in "${REQUIRED_SECRETS[@]}"; do
-      if [ ! -f "sealed-secrets/$env/$secret_file" ]; then
-        echo -e "${RED}❌ Falta archivo: sealed-secrets/$env/$secret_file${NC}"
-        missing_secrets=$((missing_secrets + 1))
-      else
-        echo -e "${GREEN}✅ Archivo presente: $secret_file${NC}"
-      fi
-    done
-    
-    if [ $missing_secrets -gt 0 ]; then
-      echo -e "${RED}🚨 Error: Faltan $missing_secrets archivos de secrets para el ambiente $env${NC}"
-      echo -e "${YELLOW}Por favor, crea los archivos necesarios en sealed-secrets/$env/ antes de continuar${NC}"
-      exit 1
+  missing_secrets=0
+  
+  for secret_file in "${REQUIRED_SECRETS[@]}"; do
+    if [ ! -f "sealed-secrets/dev/$secret_file" ]; then
+      echo -e "${RED}❌ Falta archivo: sealed-secrets/dev/$secret_file${NC}"
+      missing_secrets=$((missing_secrets + 1))
+    else
+      echo -e "${GREEN}✅ Archivo presente: $secret_file${NC}"
     fi
   done
+  
+  if [ $missing_secrets -gt 0 ]; then
+    echo -e "${RED}🚨 Error: Faltan $missing_secrets archivos de secrets para dev${NC}"
+    echo -e "${YELLOW}Por favor, crea los archivos necesarios en sealed-secrets/dev/ antes de continuar${NC}"
+    exit 1
+  fi
 }
 
 # --------------------------------------------
-# 9. GENERAR KUSTOMIZATION FILES
+# 9. GENERAR KUSTOMIZATION FILE PARA DEV
 # --------------------------------------------
-generate_kustomization_files() {
-  echo -e "${BLUE}\n📄 Generando kustomization.yaml...${NC}"
+generate_kustomization_file() {
+  echo -e "${BLUE}\n📄 Generando kustomization.yaml para dev...${NC}"
   
-  for env in dev test prod; do
-    cat > "sealed-secrets/$env/kustomization.yaml" << EOF
+  cat > "sealed-secrets/dev/kustomization.yaml" << EOF
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -203,56 +192,51 @@ resources:
   - negocio-sealed-secrets.yaml
   - frontend-sealed-secrets.yaml
 
-namespace: $env
+namespace: dev
 
 commonLabels:
-  environment: $env
+  environment: dev
   managed-by: sealed-secrets
 EOF
-    echo -e "${GREEN}✅ kustomization.yaml para $env${NC}"
-  done
+  echo -e "${GREEN}✅ kustomization.yaml para dev creado${NC}"
 }
 
 # --------------------------------------------
-# 10. APLICAR SEALED SECRETS EXISTENTES
+# 10. APLICAR SEALED SECRETS SOLO EN DEV
 # --------------------------------------------
-apply_existing_secrets() {
-  echo -e "${BLUE}\n🚀 Aplicando Sealed Secrets existentes...${NC}"
+apply_dev_secrets() {
+  echo -e "${BLUE}\n🚀 Aplicando Sealed Secrets en dev...${NC}"
   
   verify_existing_secrets
   cleanup_existing_secrets
-  generate_kustomization_files
+  generate_kustomization_file
   
-  for env in dev test prod; do
-    echo -e "${YELLOW}📦 Aplicando secrets para $env...${NC}"
-    kubectl apply -k sealed-secrets/$env/
-  done
+  echo -e "${YELLOW}📦 Aplicando secrets para dev...${NC}"
+  kubectl apply -k sealed-secrets/dev/
 }
 
-apply_existing_secrets
+apply_dev_secrets
 
 # --------------------------------------------
-# 11. VERIFICAR SECRETS EN CLUSTER
+# 11. VERIFICAR SECRETS EN CLUSTER (SOLO DEV)
 # --------------------------------------------
-echo -e "${BLUE}\n🔍 Verificando secrets en cluster...${NC}"
+echo -e "${BLUE}\n🔍 Verificando secrets en dev...${NC}"
 sleep 10
 
 EXPECTED_SECRETS=("backend-secrets" "gateway-secrets" "negocio-secrets" "frontend-tls")
 
-for env in dev test prod; do
-  echo -e "\n${YELLOW}--- Namespace: $env ---${NC}"
-  for secret in "${EXPECTED_SECRETS[@]}"; do
-    if kubectl get secret $secret -n $env >/dev/null 2>&1; then
-      OWNER=$(kubectl get secret $secret -n $env -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || echo "")
-      if [ "$OWNER" = "SealedSecret" ]; then
-        echo -e "${GREEN}✅ $secret - OK${NC}"
-      else
-        echo -e "${YELLOW}⚠️  $secret - No manejado por SealedSecret${NC}"
-      fi
+echo -e "\n${YELLOW}--- Namespace: dev ---${NC}"
+for secret in "${EXPECTED_SECRETS[@]}"; do
+  if kubectl get secret $secret -n dev >/dev/null 2>&1; then
+    OWNER=$(kubectl get secret $secret -n dev -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || echo "")
+    if [ "$OWNER" = "SealedSecret" ]; then
+      echo -e "${GREEN}✅ $secret - OK${NC}"
     else
-      echo -e "${RED}❌ $secret - No encontrado${NC}"
+      echo -e "${YELLOW}⚠️  $secret - No manejado por SealedSecret${NC}"
     fi
-  done
+  else
+    echo -e "${RED}❌ $secret - No encontrado${NC}"
+  fi
 done
 
 # --------------------------------------------
@@ -403,10 +387,10 @@ done
 # --------------------------------------------
 # 18. MENSAJE FINAL
 # --------------------------------------------
-echo -e "${GREEN}\n🚀 CONFIGURACIÓN COMPLETADA${NC}"
+echo -e "${GREEN}\n🚀 CONFIGURACIÓN COMPLETADA (SOLO DEV)${NC}"
 echo -e "${GREEN}\n💡 Resumen:${NC}"
 echo -e "${YELLOW}✅ ${#APPS[@]} aplicaciones desplegadas${NC}"
-echo -e "${YELLOW}✅ Secrets existentes aplicados correctamente${NC}"
+echo -e "${YELLOW}✅ Secrets de dev aplicados correctamente${NC}"
 echo -e "${YELLOW}✅ ArgoCD funcionando${NC}"
 
 echo -e "${GREEN}\n🔗 Accesos:${NC}"
