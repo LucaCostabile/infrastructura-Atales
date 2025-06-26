@@ -179,7 +179,6 @@ generate_initial_sealed_secrets() {
         --from-literal=CRYPTO_SECRET="$(openssl rand -hex 32)" \
         --from-literal=DB_PASSWORD="$DB_PASSWORD" \
         --from-literal=DB_USER="atales_user" \
-        --from-literal=EXTERNAL_API_KEY="$(openssl rand -hex 16)" \
         --from-literal=GMAIL_APP_PASSWORD="" \
         --from-literal=GMAIL_USER="atales@example.com" \
         --from-literal=JWT_SECRET_KEY="$JWT_SECRET_KEY" \
