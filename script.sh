@@ -286,11 +286,11 @@ fi
 echo -e "${BLUE}\n🚀 Desplegando nuevas aplicaciones Argo CD...${NC}"
 
 APPS=(
-  "auth-service-app.yaml"
-  "business-service-app.yaml"
-  "api-gateway-app.yaml"
-  "frontend-app.yaml"
   "mysql-app.yaml"
+  "frontend-app.yaml"
+  "api-gateway-app.yaml"
+  "business-service-app.yaml"
+  "auth-service-app.yaml"
 )
 
 for app in "${APPS[@]}"; do
