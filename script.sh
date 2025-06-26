@@ -1,5 +1,5 @@
 #!/bin/bash
-# 🚀 Script GitOps Puro - Solo infraestructura base + Sealed Secrets (MEJORADO)
+# 🚀 Script GitOps Puro - Solo infraestructura base + Sealed Secrets (CORREGIDO)
 set -e
 
 # 🎨 Colores
@@ -39,26 +39,31 @@ else
 fi
 
 # --------------------------------------------
-# 3. INSTALAR SEALED SECRETS CONTROLLER
+# 3. INSTALAR SEALED SECRETS CONTROLLER (VERSIÓN ACTUALIZADA)
 # --------------------------------------------
 echo -e "${BLUE}\n🔒 Verificando instalación de Sealed Secrets...${NC}"
 if ! kubectl get deployment sealed-secrets-controller -n kube-system > /dev/null 2>&1; then
   echo -e "${YELLOW}🟡 Instalando Sealed Secrets Controller...${NC}"
-  kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.18.0/controller.yaml
+  # Usar versión más reciente y estable
+  kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
   
   echo -e "${BLUE}⏳ Esperando que Sealed Secrets esté listo...${NC}"
   kubectl wait --for=condition=Ready pod -l name=sealed-secrets-controller -n kube-system --timeout=300s
+  
+  # Esperar un poco más para que se genere la clave privada
+  echo -e "${BLUE}⏳ Esperando generación de claves...${NC}"
+  sleep 30
 else
   echo -e "${GREEN}✅ Sealed Secrets Controller ya está instalado${NC}"
 fi
 
 # --------------------------------------------
-# 4. INSTALAR KUBESEAL CLI
+# 4. INSTALAR KUBESEAL CLI (VERSIÓN ACTUALIZADA)
 # --------------------------------------------
 echo -e "${BLUE}\n🛠️ Verificando kubeseal CLI...${NC}"
 if ! command -v kubeseal &> /dev/null; then
   echo -e "${YELLOW}🟡 Instalando kubeseal CLI...${NC}"
-  KUBESEAL_VERSION="0.18.0"
+  KUBESEAL_VERSION="0.24.0"
   OS=$(uname -s | tr '[:upper:]' '[:lower:]')
   ARCH=$(uname -m)
   
@@ -93,8 +98,51 @@ for ns in dev test prod; do
 done
 
 # --------------------------------------------
-# 6. OBTENER CLAVE PÚBLICA PARA SEALED SECRETS
+# 6. VERIFICAR Y OBTENER CLAVE PÚBLICA
 # --------------------------------------------
+echo -e "${BLUE}\n🔑 Verificando disponibilidad del controlador...${NC}"
+
+# Función para verificar si el controlador está completamente listo
+wait_for_sealed_secrets_controller() {
+  local max_attempts=12
+  local attempt=1
+  
+  while [ $attempt -le $max_attempts ]; do
+    echo -e "${YELLOW}🔄 Intento $attempt/$max_attempts - Verificando controlador...${NC}"
+    
+    if kubeseal --fetch-cert > /dev/null 2>&1; then
+      echo -e "${GREEN}✅ Controlador de Sealed Secrets está listo${NC}"
+      return 0
+    fi
+    
+    echo -e "${YELLOW}⏳ Esperando 15 segundos antes del siguiente intento...${NC}"
+    sleep 15
+    attempt=$((attempt + 1))
+  done
+  
+  echo -e "${RED}❌ Error: El controlador no está respondiendo después de $max_attempts intentos${NC}"
+  echo -e "${YELLOW}🔍 Depurando el problema...${NC}"
+  
+  # Información de debug
+  echo -e "${BLUE}📊 Estado del deployment:${NC}"
+  kubectl get deployment sealed-secrets-controller -n kube-system || true
+  
+  echo -e "${BLUE}📊 Estado de los pods:${NC}"
+  kubectl get pods -n kube-system -l name=sealed-secrets-controller || true
+  
+  echo -e "${BLUE}📊 Logs del controlador:${NC}"
+  kubectl logs -n kube-system -l name=sealed-secrets-controller --tail=20 || true
+  
+  return 1
+}
+
+# Esperar a que el controlador esté completamente funcional
+if ! wait_for_sealed_secrets_controller; then
+  echo -e "${RED}❌ No se pudo inicializar el controlador de Sealed Secrets${NC}"
+  exit 1
+fi
+
+# Obtener la clave pública
 echo -e "${BLUE}\n🔑 Obteniendo clave pública del cluster...${NC}"
 kubeseal --fetch-cert > sealed-secrets-cert.pem
 echo -e "${GREEN}✅ Clave pública guardada en sealed-secrets-cert.pem${NC}"
@@ -166,11 +214,11 @@ generate_initial_sealed_secrets() {
       --dry-run=client -o yaml | \
     kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/negocio-sealed-secrets.yaml"
     
-    # 4. Frontend TLS secrets (ejemplo)
+    # 4. Frontend TLS secrets (ejemplo con certificado dummy)
     kubectl create secret tls frontend-tls \
       --namespace=$env \
-      --cert=<(echo "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t") \
-      --key=<(echo "LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t") \
+      --cert=<(echo -e "-----BEGIN CERTIFICATE-----\nLS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t\n-----END CERTIFICATE-----") \
+      --key=<(echo -e "-----BEGIN PRIVATE KEY-----\nLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t\n-----END PRIVATE KEY-----") \
       --dry-run=client -o yaml | \
     kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/frontend-sealed-secrets.yaml"
     
@@ -303,11 +351,75 @@ echo -e "${GREEN}\n🔑 Contraseña ArgoCD (usuario: admin):${NC}"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 # --------------------------------------------
-# 17. CREAR BACKUP DE LA CLAVE PRIVADA
+# 17. CREAR BACKUP DE LA CLAVE PRIVADA (MEJORADO)
 # --------------------------------------------
-echo -e "${BLUE}\n💾 Creando backup de la clave privada de Sealed Secrets...${NC}"
-kubectl get secret -n kube-system sealed-secrets-key -o yaml > sealed-secrets-private-key-backup.yaml
-echo -e "${GREEN}✅ Backup guardado en sealed-secrets-private-key-backup.yaml${NC}"
+create_sealed_secrets_backup() {
+  echo -e "${BLUE}\n💾 Creando backup de la clave privada de Sealed Secrets...${NC}"
+  
+  # Lista de posibles nombres de secrets para la clave privada
+  POSSIBLE_SECRET_NAMES=(
+    "sealed-secrets-key"
+    "sealed-secrets-controller"
+    "sealed-secrets-tls"
+  )
+  
+  SECRET_FOUND=false
+  
+  for secret_name in "${POSSIBLE_SECRET_NAMES[@]}"; do
+    if kubectl get secret "$secret_name" -n kube-system >/dev/null 2>&1; then
+      echo -e "${GREEN}✅ Encontrado secret: $secret_name${NC}"
+      kubectl get secret "$secret_name" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
+      echo -e "${GREEN}✅ Backup guardado en sealed-secrets-private-key-backup.yaml${NC}"
+      SECRET_FOUND=true
+      break
+    fi
+  done
+  
+  if [ "$SECRET_FOUND" = false ]; then
+    echo -e "${YELLOW}⚠️  No se encontró el secret de la clave privada con nombres estándar${NC}"
+    echo -e "${BLUE}🔍 Buscando secrets relacionados con sealed-secrets...${NC}"
+    
+    # Buscar todos los secrets que contengan "sealed" en el nombre
+    SEALED_SECRETS=$(kubectl get secrets -n kube-system --no-headers | grep -i sealed | awk '{print $1}' || true)
+    
+    if [ -n "$SEALED_SECRETS" ]; then
+      echo -e "${YELLOW}📋 Secrets encontrados con 'sealed' en el nombre:${NC}"
+      echo "$SEALED_SECRETS"
+      
+      # Tomar el primero encontrado
+      FIRST_SECRET=$(echo "$SEALED_SECRETS" | head -n1)
+      echo -e "${YELLOW}🔄 Usando el primer secret encontrado: $FIRST_SECRET${NC}"
+      kubectl get secret "$FIRST_SECRET" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
+      echo -e "${GREEN}✅ Backup guardado en sealed-secrets-private-key-backup.yaml${NC}"
+    else
+      echo -e "${RED}❌ No se encontraron secrets relacionados con sealed-secrets${NC}"
+      echo -e "${BLUE}📊 Todos los secrets en kube-system:${NC}"
+      kubectl get secrets -n kube-system
+      
+      # Crear un archivo con información de debug
+      cat > sealed-secrets-debug.txt << EOF
+# Debug info para Sealed Secrets
+# Fecha: $(date)
+
+## Deployment status:
+$(kubectl get deployment sealed-secrets-controller -n kube-system -o wide 2>&1)
+
+## Pod status:
+$(kubectl get pods -n kube-system -l name=sealed-secrets-controller -o wide 2>&1)
+
+## Pod logs:
+$(kubectl logs -n kube-system -l name=sealed-secrets-controller --tail=50 2>&1)
+
+## All secrets in kube-system:
+$(kubectl get secrets -n kube-system 2>&1)
+EOF
+      echo -e "${YELLOW}📝 Información de debug guardada en sealed-secrets-debug.txt${NC}"
+    fi
+  fi
+}
+
+# Ejecutar la función de backup
+create_sealed_secrets_backup
 
 # --------------------------------------------
 # 18. MONITOREO DE APLICACIONES
