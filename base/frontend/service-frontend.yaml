@@ -2,11 +2,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend-service
-  namespace: test
   annotations:
-    service.beta.kubernetes.io/aws-load-balancer-internal: "false"
-    service.beta.kubernetes.io/aws-load-balancer-type: "elb"
-    service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/"
+    service.beta.kubernetes.io/aws-load-balancer-internal: "false"  # LB público
+    service.beta.kubernetes.io/aws-load-balancer-subnets: "subnet-0f6cacddf6ba06962,subnet-0725b942016f462d2"  # Tus subredes
+    service.beta.kubernetes.io/aws-load-balancer-type: "external"  # Fuerza tipo público
+    argocd.argoproj.io/sync-options: SkipDryRunOnMissingResource=true  # Opcional: Evita que ArgoCD valide subredes
 spec:
   type: LoadBalancer
   selector:
@@ -15,4 +15,3 @@ spec:
     - protocol: TCP
       port: 80
       targetPort: 80
-  externalTrafficPolicy: Local  # Mejor rendimiento y diagnóstico
