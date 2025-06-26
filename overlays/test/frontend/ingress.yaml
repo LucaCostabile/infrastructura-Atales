@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: atales-ingress
-  namespace: dev
+  namespace: test
   annotations:
     nginx.ingress.kubernetes.io/ssl-redirect: "true"  # Redirige HTTP→HTTPS automático
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"

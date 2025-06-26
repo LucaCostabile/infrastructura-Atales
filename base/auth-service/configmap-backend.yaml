@@ -4,9 +4,9 @@ metadata:
   name: backend-config
 data:
   # Configuración común para todos los servicios
-  DB_HOST: "mysql-service"
+  DB_HOST: "atalesdb.crxuvzgv6rwg.us-east-1.rds.amazonaws.com"
   DB_NAME: "atalesdb"
-  NODE_ENV: "production"
+  NODE_ENV: "test"
   
   # Configuración específica de puertos
   API_GATEWAY_PORT: "3000"
