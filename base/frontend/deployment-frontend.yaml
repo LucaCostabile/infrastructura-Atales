@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
+  namespace: test
 spec:
   replicas: 1
   selector:
@@ -18,11 +19,6 @@ spec:
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80
-        - containerPort: 443
-        volumeMounts:
-        - name: ssl-certs
-          mountPath: /etc/nginx/ssl
-          readOnly: true
         resources:
           limits:
             memory: "256Mi"
@@ -30,12 +26,4 @@ spec:
           requests:
             memory: "128Mi"
             cpu: "250m"
-      volumes:
-      - name: ssl-certs
-        secret:
-          secretName: frontend-tls
-          items:
-            - key: tls.crt
-              path: atales.crt
-            - key: tls.key
-              path: atales.key
+
