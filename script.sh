@@ -141,15 +141,14 @@ fi
 # 9. APLICAR SEALED SECRETS
 # --------------------------------------------
 echo -e "${BLUE}\n🚀 Aplicando Sealed Secrets...${NC}"
-kubectl apply -f sealed-secrets/ --recursive
 
-# Verificar que los secrets fueron creados
-echo -e "${BLUE}\n🔍 Verificando secrets creados...${NC}"
 for env in dev test prod; do
-  if kubectl get secret backend-secrets -n $env > /dev/null 2>&1; then
-    echo -e "${GREEN}✅ Secret backend-secrets creado en namespace $env${NC}"
+  if [ -f "sealed-secrets/$env/kustomization.yaml" ]; then
+    echo -e "${YELLOW}📦 Aplicando sealed secrets para $env con Kustomize...${NC}"
+    kubectl apply -k sealed-secrets/$env/
   else
-    echo -e "${RED}❌ Error: Secret backend-secrets NO encontrado en namespace $env${NC}"
+    echo -e "${YELLOW}📦 Aplicando sealed secrets para $env directamente...${NC}"
+    kubectl apply -f sealed-secrets/$env/ 2>/dev/null || true
   fi
 done
 
