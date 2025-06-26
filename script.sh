@@ -177,52 +177,107 @@ cleanup_existing_secrets() {
 # 8. FUNCIÓN PARA GENERAR SEALED SECRETS INICIALES
 # --------------------------------------------
 generate_initial_sealed_secrets() {
-  echo -e "${BLUE}\n🔐 Generando Sealed Secrets iniciales...${NC}"
+  echo -e "${BLUE}\n🔐 Generando Sealed Secrets usando valores existentes...${NC}"
   
-  # Crear directorio para sealed secrets
+  # Crear directorio para sealed secrets si no existe
   mkdir -p sealed-secrets/{dev,test,prod}
   
   for env in dev test prod; do
-    echo -e "${YELLOW}📦 Generando sealed secrets para ambiente: $env${NC}"
+    echo -e "${YELLOW}📦 Procesando ambiente: $env${NC}"
     
+    # --------------------------------------------------
     # 1. Backend secrets
-    kubectl create secret generic backend-secrets \
-      --namespace=$env \
-      --from-literal=CRYPTO_SECRET="example-crypto-secret-$env" \
-      --from-literal=DB_PASSWORD="example-db-password-$env" \
-      --from-literal=DB_USER="atales_user" \
-      --from-literal=EXTERNAL_API_KEY="example-api-key-$env" \
-      --from-literal=GMAIL_APP_PASSWORD="example-gmail-password-$env" \
-      --from-literal=GMAIL_USER="atales@example.com" \
-      --from-literal=JWT_SECRET_KEY="example-jwt-secret-$env" \
-      --dry-run=client -o yaml | \
-    kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/auth-sealed-secrets.yaml"
+    # --------------------------------------------------
+    if [ -f "sealed-secrets/$env/auth-sealed-secrets.yaml" ]; then
+      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/auth-sealed-secrets.yaml${NC}"
+    else
+      echo -e "${YELLOW}🟡 Generando nuevo backend-sealed-secrets.yaml para $env${NC}"
+      
+      # Valores por defecto SOLO para desarrollo
+      if [ "$env" == "dev" ]; then
+        DB_PASSWORD="dev-password-123"
+        JWT_SECRET_KEY="dev-jwt-secret-456"
+      else
+        DB_PASSWORD=$(openssl rand -hex 16)
+        JWT_SECRET_KEY=$(openssl rand -hex 32)
+      fi
+      
+      kubectl create secret generic backend-secrets \
+        --namespace=$env \
+        --from-literal=CRYPTO_SECRET="$(openssl rand -hex 32)" \
+        --from-literal=DB_PASSWORD="$DB_PASSWORD" \
+        --from-literal=DB_USER="atales_user" \
+        --from-literal=EXTERNAL_API_KEY="$(openssl rand -hex 16)" \
+        --from-literal=GMAIL_APP_PASSWORD="" \
+        --from-literal=GMAIL_USER="atales@example.com" \
+        --from-literal=JWT_SECRET_KEY="$JWT_SECRET_KEY" \
+        --dry-run=client -o yaml | \
+      kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/auth-sealed-secrets.yaml"
+    fi
     
-    # 2. Gateway secrets (ejemplo)
-    kubectl create secret generic gateway-secrets \
-      --namespace=$env \
-      --from-literal=API_KEY="gateway-api-key-$env" \
-      --from-literal=SECRET_TOKEN="gateway-secret-$env" \
-      --dry-run=client -o yaml | \
-    kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/gateway-sealed-secrets.yaml"
+    # --------------------------------------------------
+    # 2. Frontend TLS secrets
+    # --------------------------------------------------
+    if [ -f "sealed-secrets/$env/frontend-sealed-secrets.yaml" ]; then
+      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/frontend-sealed-secrets.yaml${NC}"
+    else
+      echo -e "${YELLOW}🟡 Generando nuevo frontend-sealed-secrets.yaml para $env${NC}"
+      
+      # Generar certificados auto-firmados para desarrollo
+      if [ "$env" == "dev" ]; then
+        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+          -keyout /tmp/tls.key \
+          -out /tmp/tls.crt \
+          -subj "/CN=atales.local/O=Atales Dev" 2>/dev/null
+        
+        kubectl create secret tls frontend-tls \
+          --namespace=$env \
+          --cert=/tmp/tls.crt \
+          --key=/tmp/tls.key \
+          --dry-run=client -o yaml | \
+        kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/frontend-sealed-secrets.yaml"
+        
+        rm -f /tmp/tls.key /tmp/tls.crt
+      else
+        echo -e "${RED}❌ ERROR: Se necesitan certificados reales para $env${NC}"
+        echo -e "${YELLOW}Por favor, crea manualmente sealed-secrets/$env/frontend-sealed-secrets.yaml${NC}"
+        echo -e "${YELLOW}Usando: kubeseal --cert sealed-secrets-cert.pem -o yaml < secret.yaml > frontend-sealed-secrets.yaml${NC}"
+      fi
+    fi
     
-    # 3. Negocio secrets (ejemplo)
-    kubectl create secret generic negocio-secrets \
-      --namespace=$env \
-      --from-literal=BUSINESS_API_KEY="business-api-key-$env" \
-      --from-literal=BUSINESS_SECRET="business-secret-$env" \
-      --dry-run=client -o yaml | \
-    kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/negocio-sealed-secrets.yaml"
+    # --------------------------------------------------
+    # 3. Gateway secrets
+    # --------------------------------------------------
+    if [ -f "sealed-secrets/$env/gateway-sealed-secrets.yaml" ]; then
+      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/gateway-sealed-secrets.yaml${NC}"
+    else
+      echo -e "${YELLOW}🟡 Generando nuevo gateway-sealed-secrets.yaml para $env${NC}"
+      
+      kubectl create secret generic gateway-secrets \
+        --namespace=$env \
+        --from-literal=API_KEY="$(openssl rand -hex 16)" \
+        --from-literal=SECRET_TOKEN="$(openssl rand -hex 32)" \
+        --dry-run=client -o yaml | \
+      kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/gateway-sealed-secrets.yaml"
+    fi
     
-    # 4. Frontend TLS secrets (ejemplo con certificado dummy)
-    kubectl create secret tls frontend-tls \
-      --namespace=$env \
-      --cert=<(echo -e "-----BEGIN CERTIFICATE-----\nLS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0t\n-----END CERTIFICATE-----") \
-      --key=<(echo -e "-----BEGIN PRIVATE KEY-----\nLS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0t\n-----END PRIVATE KEY-----") \
-      --dry-run=client -o yaml | \
-    kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/frontend-sealed-secrets.yaml"
+    # --------------------------------------------------
+    # 4. Negocio secrets
+    # --------------------------------------------------
+    if [ -f "sealed-secrets/$env/negocio-sealed-secrets.yaml" ]; then
+      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/negocio-sealed-secrets.yaml${NC}"
+    else
+      echo -e "${YELLOW}🟡 Generando nuevo negocio-sealed-secrets.yaml para $env${NC}"
+      
+      kubectl create secret generic negocio-secrets \
+        --namespace=$env \
+        --from-literal=BUSINESS_API_KEY="$(openssl rand -hex 16)" \
+        --from-literal=BUSINESS_SECRET="$(openssl rand -hex 32)" \
+        --dry-run=client -o yaml | \
+      kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/negocio-sealed-secrets.yaml"
+    fi
     
-    echo -e "${GREEN}✅ Sealed secrets generados para $env${NC}"
+    echo -e "${GREEN}✅ Sealed secrets procesados para $env${NC}"
   done
 }
 
