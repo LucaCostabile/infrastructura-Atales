@@ -1,5 +1,5 @@
 #!/bin/bash
-# 🚀 Script GitOps Puro - Solo infraestructura base + Sealed Secrets (CORREGIDO)
+# 🚀 Script GitOps Actualizado - Multi-app Argo CD + Sealed Secrets
 set -e
 
 # 🎨 Colores
@@ -9,7 +9,7 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 NC='\033[0m'
 
-echo -e "${GREEN}\n🌐 INICIANDO ENTORNO GITOPS PURO + SEALED SECRETS${NC}"
+echo -e "${GREEN}\n🌐 INICIANDO ENTORNO GITOPS MULTI-APP + SEALED SECRETS${NC}"
 
 # --------------------------------------------
 # 1. INICIAR MINIKUBE
@@ -39,26 +39,22 @@ else
 fi
 
 # --------------------------------------------
-# 3. INSTALAR SEALED SECRETS CONTROLLER (VERSIÓN ACTUALIZADA)
+# 3. INSTALAR SEALED SECRETS CONTROLLER
 # --------------------------------------------
 echo -e "${BLUE}\n🔒 Verificando instalación de Sealed Secrets...${NC}"
 if ! kubectl get deployment sealed-secrets-controller -n kube-system > /dev/null 2>&1; then
   echo -e "${YELLOW}🟡 Instalando Sealed Secrets Controller...${NC}"
-  # Usar versión más reciente y estable
   kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
   
   echo -e "${BLUE}⏳ Esperando que Sealed Secrets esté listo...${NC}"
   kubectl wait --for=condition=Ready pod -l name=sealed-secrets-controller -n kube-system --timeout=300s
-  
-  # Esperar un poco más para que se genere la clave privada
-  echo -e "${BLUE}⏳ Esperando generación de claves...${NC}"
   sleep 30
 else
   echo -e "${GREEN}✅ Sealed Secrets Controller ya está instalado${NC}"
 fi
 
 # --------------------------------------------
-# 4. INSTALAR KUBESEAL CLI (VERSIÓN ACTUALIZADA)
+# 4. INSTALAR KUBESEAL CLI
 # --------------------------------------------
 echo -e "${BLUE}\n🛠️ Verificando kubeseal CLI...${NC}"
 if ! command -v kubeseal &> /dev/null; then
@@ -67,7 +63,6 @@ if ! command -v kubeseal &> /dev/null; then
   OS=$(uname -s | tr '[:upper:]' '[:lower:]')
   ARCH=$(uname -m)
   
-  # Mapear arquitectura
   case $ARCH in
     x86_64) ARCH="amd64" ;;
     aarch64) ARCH="arm64" ;;
@@ -78,7 +73,6 @@ if ! command -v kubeseal &> /dev/null; then
   tar -xvzf "kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz"
   sudo install -m 755 kubeseal /usr/local/bin/kubeseal
   rm -f "kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz" kubeseal
-  
   echo -e "${GREEN}✅ kubeseal CLI instalado${NC}"
 else
   echo -e "${GREEN}✅ kubeseal CLI ya está instalado${NC}"
@@ -100,73 +94,57 @@ done
 # --------------------------------------------
 # 6. VERIFICAR Y OBTENER CLAVE PÚBLICA
 # --------------------------------------------
-echo -e "${BLUE}\n🔑 Verificando disponibilidad del controlador...${NC}"
+echo -e "${BLUE}\n🔑 Verificando controlador Sealed Secrets...${NC}"
 
-# Función para verificar si el controlador está completamente listo
 wait_for_sealed_secrets_controller() {
   local max_attempts=12
   local attempt=1
   
   while [ $attempt -le $max_attempts ]; do
-    echo -e "${YELLOW}🔄 Intento $attempt/$max_attempts - Verificando controlador...${NC}"
-    
     if kubeseal --fetch-cert > /dev/null 2>&1; then
-      echo -e "${GREEN}✅ Controlador de Sealed Secrets está listo${NC}"
+      echo -e "${GREEN}✅ Controlador listo${NC}"
       return 0
     fi
     
-    echo -e "${YELLOW}⏳ Esperando 15 segundos antes del siguiente intento...${NC}"
+    echo -e "${YELLOW}🔄 Intento $attempt/$max_attempts - Esperando 15 segundos...${NC}"
     sleep 15
     attempt=$((attempt + 1))
   done
   
-  echo -e "${RED}❌ Error: El controlador no está respondiendo después de $max_attempts intentos${NC}"
-  echo -e "${YELLOW}🔍 Depurando el problema...${NC}"
-  
-  # Información de debug
-  echo -e "${BLUE}📊 Estado del deployment:${NC}"
+  echo -e "${RED}❌ Error: Controlador no responde${NC}"
   kubectl get deployment sealed-secrets-controller -n kube-system || true
-  
-  echo -e "${BLUE}📊 Estado de los pods:${NC}"
   kubectl get pods -n kube-system -l name=sealed-secrets-controller || true
-  
-  echo -e "${BLUE}📊 Logs del controlador:${NC}"
   kubectl logs -n kube-system -l name=sealed-secrets-controller --tail=20 || true
-  
   return 1
 }
 
-# Esperar a que el controlador esté completamente funcional
 if ! wait_for_sealed_secrets_controller; then
-  echo -e "${RED}❌ No se pudo inicializar el controlador de Sealed Secrets${NC}"
   exit 1
 fi
 
-# Obtener la clave pública
-echo -e "${BLUE}\n🔑 Obteniendo clave pública del cluster...${NC}"
+echo -e "${BLUE}\n🔑 Obteniendo clave pública...${NC}"
 kubeseal --fetch-cert > sealed-secrets-cert.pem
-echo -e "${GREEN}✅ Clave pública guardada en sealed-secrets-cert.pem${NC}"
+echo -e "${GREEN}✅ Clave pública guardada${NC}"
 
 # --------------------------------------------
-# 7. LIMPIAR SECRETS EXISTENTES (IMPORTANTE)
+# 7. LIMPIAR SECRETS EXISTENTES
 # --------------------------------------------
 cleanup_existing_secrets() {
-  echo -e "${BLUE}\n🧹 Limpiando secrets existentes que no son manejados por Sealed Secrets...${NC}"
+  echo -e "${BLUE}\n🧹 Limpiando secrets existentes...${NC}"
   
   PROBLEMATIC_SECRETS=("backend-secrets" "gateway-secrets" "negocio-secrets" "frontend-secrets")
   
   for env in dev test prod; do
-    echo -e "${YELLOW}📁 Limpiando namespace: $env${NC}"
+    echo -e "${YELLOW}📁 Namespace: $env${NC}"
     
     for secret in "${PROBLEMATIC_SECRETS[@]}"; do
       if kubectl get secret $secret -n $env >/dev/null 2>&1; then
-        # Verificar si NO está manejado por SealedSecret
         OWNER=$(kubectl get secret $secret -n $env -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || echo "")
         if [ "$OWNER" != "SealedSecret" ]; then
-          echo -e "${YELLOW}🗑️  Eliminando secret no manejado: $secret en $env${NC}"
+          echo -e "${YELLOW}🗑️  Eliminando secret no manejado: $secret${NC}"
           kubectl delete secret $secret -n $env
         else
-          echo -e "${GREEN}✅ Secret $secret ya es manejado por SealedSecret en $env${NC}"
+          echo -e "${GREEN}✅ $secret manejado por SealedSecret${NC}"
         fi
       fi
     done
@@ -174,26 +152,20 @@ cleanup_existing_secrets() {
 }
 
 # --------------------------------------------
-# 8. FUNCIÓN PARA GENERAR SEALED SECRETS INICIALES
+# 8. GENERAR SEALED SECRETS INICIALES
 # --------------------------------------------
 generate_initial_sealed_secrets() {
-  echo -e "${BLUE}\n🔐 Generando Sealed Secrets usando valores existentes...${NC}"
+  echo -e "${BLUE}\n🔐 Generando Sealed Secrets...${NC}"
   
-  # Crear directorio para sealed secrets si no existe
   mkdir -p sealed-secrets/{dev,test,prod}
   
   for env in dev test prod; do
-    echo -e "${YELLOW}📦 Procesando ambiente: $env${NC}"
+    echo -e "${YELLOW}📦 Ambiente: $env${NC}"
     
-    # --------------------------------------------------
-    # 1. Backend secrets
-    # --------------------------------------------------
-    if [ -f "sealed-secrets/$env/auth-sealed-secrets.yaml" ]; then
-      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/auth-sealed-secrets.yaml${NC}"
-    else
-      echo -e "${YELLOW}🟡 Generando nuevo backend-sealed-secrets.yaml para $env${NC}"
+    # Auth Service Secrets
+    if [ ! -f "sealed-secrets/$env/auth-sealed-secrets.yaml" ]; then
+      echo -e "${YELLOW}🟡 Generando auth-sealed-secrets.yaml...${NC}"
       
-      # Valores por defecto SOLO para desarrollo
       if [ "$env" == "dev" ]; then
         DB_PASSWORD="dev-password-123"
         JWT_SECRET_KEY="dev-jwt-secret-456"
@@ -215,15 +187,10 @@ generate_initial_sealed_secrets() {
       kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/auth-sealed-secrets.yaml"
     fi
     
-    # --------------------------------------------------
-    # 2. Frontend TLS secrets
-    # --------------------------------------------------
-    if [ -f "sealed-secrets/$env/frontend-sealed-secrets.yaml" ]; then
-      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/frontend-sealed-secrets.yaml${NC}"
-    else
-      echo -e "${YELLOW}🟡 Generando nuevo frontend-sealed-secrets.yaml para $env${NC}"
+    # Frontend TLS Secrets
+    if [ ! -f "sealed-secrets/$env/frontend-sealed-secrets.yaml" ]; then
+      echo -e "${YELLOW}🟡 Generando frontend-sealed-secrets.yaml...${NC}"
       
-      # Generar certificados auto-firmados para desarrollo
       if [ "$env" == "dev" ]; then
         openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
           -keyout /tmp/tls.key \
@@ -239,19 +206,13 @@ generate_initial_sealed_secrets() {
         
         rm -f /tmp/tls.key /tmp/tls.crt
       else
-        echo -e "${RED}❌ ERROR: Se necesitan certificados reales para $env${NC}"
-        echo -e "${YELLOW}Por favor, crea manualmente sealed-secrets/$env/frontend-sealed-secrets.yaml${NC}"
-        echo -e "${YELLOW}Usando: kubeseal --cert sealed-secrets-cert.pem -o yaml < secret.yaml > frontend-sealed-secrets.yaml${NC}"
+        echo -e "${RED}❌ Necesitas certificados reales para $env${NC}"
       fi
     fi
     
-    # --------------------------------------------------
-    # 3. Gateway secrets
-    # --------------------------------------------------
-    if [ -f "sealed-secrets/$env/gateway-sealed-secrets.yaml" ]; then
-      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/gateway-sealed-secrets.yaml${NC}"
-    else
-      echo -e "${YELLOW}🟡 Generando nuevo gateway-sealed-secrets.yaml para $env${NC}"
+    # Gateway Secrets
+    if [ ! -f "sealed-secrets/$env/gateway-sealed-secrets.yaml" ]; then
+      echo -e "${YELLOW}🟡 Generando gateway-sealed-secrets.yaml...${NC}"
       
       kubectl create secret generic gateway-secrets \
         --namespace=$env \
@@ -261,13 +222,9 @@ generate_initial_sealed_secrets() {
       kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/gateway-sealed-secrets.yaml"
     fi
     
-    # --------------------------------------------------
-    # 4. Negocio secrets
-    # --------------------------------------------------
-    if [ -f "sealed-secrets/$env/negocio-sealed-secrets.yaml" ]; then
-      echo -e "${GREEN}✅ Usando archivo existente: sealed-secrets/$env/negocio-sealed-secrets.yaml${NC}"
-    else
-      echo -e "${YELLOW}🟡 Generando nuevo negocio-sealed-secrets.yaml para $env${NC}"
+    # Business Service Secrets
+    if [ ! -f "sealed-secrets/$env/negocio-sealed-secrets.yaml" ]; then
+      echo -e "${YELLOW}🟡 Generando negocio-sealed-secrets.yaml...${NC}"
       
       kubectl create secret generic negocio-secrets \
         --namespace=$env \
@@ -276,8 +233,6 @@ generate_initial_sealed_secrets() {
         --dry-run=client -o yaml | \
       kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/negocio-sealed-secrets.yaml"
     fi
-    
-    echo -e "${GREEN}✅ Sealed secrets procesados para $env${NC}"
   done
 }
 
@@ -285,7 +240,7 @@ generate_initial_sealed_secrets() {
 # 9. GENERAR KUSTOMIZATION FILES
 # --------------------------------------------
 generate_kustomization_files() {
-  echo -e "${BLUE}\n📄 Generando archivos kustomization.yaml...${NC}"
+  echo -e "${BLUE}\n📄 Generando kustomization.yaml...${NC}"
   
   for env in dev test prod; do
     cat > "sealed-secrets/$env/kustomization.yaml" << EOF
@@ -304,12 +259,12 @@ commonLabels:
   environment: $env
   managed-by: sealed-secrets
 EOF
-    echo -e "${GREEN}✅ kustomization.yaml generado para $env${NC}"
+    echo -e "${GREEN}✅ kustomization.yaml para $env${NC}"
   done
 }
 
 # --------------------------------------------
-# 10. GENERAR SEALED SECRETS SI NO EXISTEN
+# 10. GENERAR/APLICAR SEALED SECRETS
 # --------------------------------------------
 if [ ! -d "sealed-secrets" ] || [ -z "$(ls -A sealed-secrets 2>/dev/null)" ]; then
   cleanup_existing_secrets
@@ -320,25 +275,19 @@ else
   cleanup_existing_secrets
 fi
 
-# --------------------------------------------
-# 11. APLICAR SEALED SECRETS CON KUSTOMIZE
-# --------------------------------------------
 echo -e "${BLUE}\n🚀 Aplicando Sealed Secrets...${NC}"
-
 for env in dev test prod; do
   if [ -f "sealed-secrets/$env/kustomization.yaml" ]; then
-    echo -e "${YELLOW}📦 Aplicando sealed secrets para $env con Kustomize...${NC}"
     kubectl apply -k sealed-secrets/$env/
   else
-    echo -e "${YELLOW}📦 Aplicando sealed secrets para $env directamente...${NC}"
     kubectl apply -f sealed-secrets/$env/ 2>/dev/null || true
   fi
 done
 
 # --------------------------------------------
-# 12. VERIFICAR QUE LOS SECRETS FUERON CREADOS
+# 11. VERIFICAR SECRETS
 # --------------------------------------------
-echo -e "${BLUE}\n🔍 Verificando que los secrets fueron creados correctamente:${NC}"
+echo -e "${BLUE}\n🔍 Verificando secrets...${NC}"
 sleep 10
 
 EXPECTED_SECRETS=("backend-secrets" "gateway-secrets" "negocio-secrets" "frontend-tls")
@@ -347,12 +296,11 @@ for env in dev test prod; do
   echo -e "\n${YELLOW}--- Namespace: $env ---${NC}"
   for secret in "${EXPECTED_SECRETS[@]}"; do
     if kubectl get secret $secret -n $env >/dev/null 2>&1; then
-      # Verificar que fue creado por SealedSecret
       OWNER=$(kubectl get secret $secret -n $env -o jsonpath='{.metadata.ownerReferences[0].kind}' 2>/dev/null || echo "")
       if [ "$OWNER" = "SealedSecret" ]; then
-        echo -e "${GREEN}✅ $secret - Creado por SealedSecret${NC}"
+        echo -e "${GREEN}✅ $secret - OK${NC}"
       else
-        echo -e "${YELLOW}⚠️  $secret - Existe pero no es manejado por SealedSecret${NC}"
+        echo -e "${YELLOW}⚠️  $secret - No manejado por SealedSecret${NC}"
       fi
     else
       echo -e "${RED}❌ $secret - No encontrado${NC}"
@@ -361,39 +309,57 @@ for env in dev test prod; do
 done
 
 # --------------------------------------------
-# 13. INSTALAR ARGOCD
+# 12. INSTALAR ARGOCD
 # --------------------------------------------
-echo -e "${BLUE}\n🛠️ Verificando instalación de ArgoCD...${NC}"
+echo -e "${BLUE}\n🛠️ Instalando ArgoCD...${NC}"
 if ! kubectl get ns argocd > /dev/null 2>&1; then
-  echo -e "${YELLOW}🟡 Instalando ArgoCD...${NC}"
   kubectl create namespace argocd
   kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 else
   echo -e "${GREEN}✅ ArgoCD ya está instalado${NC}"
 fi
 
-# --------------------------------------------
-# 14. ESPERAR A QUE ARGOCD ESTÉ LISTO
-# --------------------------------------------
 echo -e "${BLUE}\n⏳ Esperando que ArgoCD esté listo...${NC}"
 kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
 
 # --------------------------------------------
-# 15. APLICAR ATALES-DEV (solo si existe)
+# 13. ELIMINAR APLICACIÓN ANTIGUA
 # --------------------------------------------
-if [ -f "argo-apps/atales-dev-app.yaml" ]; then
-  echo -e "${YELLOW}📦 Aplicando Atales-Dev...${NC}"
-  kubectl apply -f argo-apps/atales-dev-app.yaml -n argocd
+echo -e "${BLUE}\n🗑️  Limpiando aplicación antigua...${NC}"
+if kubectl get application atales-dev -n argocd > /dev/null 2>&1; then
+  kubectl delete application atales-dev -n argocd
+  echo -e "${GREEN}✅ Aplicación antigua eliminada${NC}"
 else
-  echo -e "${YELLOW}⚠️  Archivo argo-apps/atales-dev-app.yaml no encontrado, saltando...${NC}"
+  echo -e "${GREEN}✅ No hay aplicación antigua que eliminar${NC}"
 fi
 
 # --------------------------------------------
-# 16. CONFIGURAR PORT-FORWARD
+# 14. APLICAR NUEVAS APLICACIONES ARGO CD
 # --------------------------------------------
-echo -e "${YELLOW}\n🚪 Habilitando acceso a ArgoCD en https://localhost:8080 ...${NC}"
+echo -e "${BLUE}\n🚀 Desplegando nuevas aplicaciones Argo CD...${NC}"
 
-# Matar procesos port-forward existentes
+APPS=(
+  "auth-service-app.yaml"
+  "business-service-app.yaml"
+  "external-secrets-app.yaml"
+  "frontend-app.yaml"
+  "mysql-app.yaml"
+)
+
+for app in "${APPS[@]}"; do
+  if [ -f "argo-apps/${app}" ]; then
+    echo -e "${YELLOW}📦 Aplicando ${app}...${NC}"
+    kubectl apply -f "argo-apps/${app}" -n argocd
+    sleep 2
+  else
+    echo -e "${RED}❌ Archivo argo-apps/${app} no encontrado${NC}"
+  fi
+done
+
+# --------------------------------------------
+# 15. CONFIGURAR PORT-FORWARD
+# --------------------------------------------
+echo -e "${YELLOW}\n🚪 Habilitando acceso a ArgoCD...${NC}"
 pkill -f "kubectl port-forward.*argocd-server" 2>/dev/null || true
 sleep 2
 
@@ -401,17 +367,15 @@ kubectl port-forward svc/argocd-server -n argocd 8080:443 > /dev/null 2>&1 &
 PORT_FORWARD_PID=$!
 sleep 3
 
-# Mostrar contraseña
-echo -e "${GREEN}\n🔑 Contraseña ArgoCD (usuario: admin):${NC}"
+echo -e "${GREEN}\n🔑 Contraseña ArgoCD (admin):${NC}"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 # --------------------------------------------
-# 17. CREAR BACKUP DE LA CLAVE PRIVADA (MEJORADO)
+# 16. BACKUP CLAVE PRIVADA
 # --------------------------------------------
 create_sealed_secrets_backup() {
-  echo -e "${BLUE}\n💾 Creando backup de la clave privada de Sealed Secrets...${NC}"
+  echo -e "${BLUE}\n💾 Creando backup de clave privada...${NC}"
   
-  # Lista de posibles nombres de secrets para la clave privada
   POSSIBLE_SECRET_NAMES=(
     "sealed-secrets-key"
     "sealed-secrets-controller"
@@ -422,109 +386,90 @@ create_sealed_secrets_backup() {
   
   for secret_name in "${POSSIBLE_SECRET_NAMES[@]}"; do
     if kubectl get secret "$secret_name" -n kube-system >/dev/null 2>&1; then
-      echo -e "${GREEN}✅ Encontrado secret: $secret_name${NC}"
       kubectl get secret "$secret_name" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
-      echo -e "${GREEN}✅ Backup guardado en sealed-secrets-private-key-backup.yaml${NC}"
+      echo -e "${GREEN}✅ Backup guardado${NC}"
       SECRET_FOUND=true
       break
     fi
   done
   
   if [ "$SECRET_FOUND" = false ]; then
-    echo -e "${YELLOW}⚠️  No se encontró el secret de la clave privada con nombres estándar${NC}"
-    echo -e "${BLUE}🔍 Buscando secrets relacionados con sealed-secrets...${NC}"
-    
-    # Buscar todos los secrets que contengan "sealed" en el nombre
     SEALED_SECRETS=$(kubectl get secrets -n kube-system --no-headers | grep -i sealed | awk '{print $1}' || true)
     
     if [ -n "$SEALED_SECRETS" ]; then
-      echo -e "${YELLOW}📋 Secrets encontrados con 'sealed' en el nombre:${NC}"
-      echo "$SEALED_SECRETS"
-      
-      # Tomar el primero encontrado
       FIRST_SECRET=$(echo "$SEALED_SECRETS" | head -n1)
-      echo -e "${YELLOW}🔄 Usando el primer secret encontrado: $FIRST_SECRET${NC}"
       kubectl get secret "$FIRST_SECRET" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
-      echo -e "${GREEN}✅ Backup guardado en sealed-secrets-private-key-backup.yaml${NC}"
+      echo -e "${GREEN}✅ Backup guardado (secret alternativo)${NC}"
     else
-      echo -e "${RED}❌ No se encontraron secrets relacionados con sealed-secrets${NC}"
-      echo -e "${BLUE}📊 Todos los secrets en kube-system:${NC}"
-      kubectl get secrets -n kube-system
-      
-      # Crear un archivo con información de debug
+      echo -e "${RED}❌ No se encontró el secret${NC}"
       cat > sealed-secrets-debug.txt << EOF
-# Debug info para Sealed Secrets
-# Fecha: $(date)
+# Debug info
+$(date)
 
-## Deployment status:
+## Deployment:
 $(kubectl get deployment sealed-secrets-controller -n kube-system -o wide 2>&1)
 
-## Pod status:
+## Pods:
 $(kubectl get pods -n kube-system -l name=sealed-secrets-controller -o wide 2>&1)
 
-## Pod logs:
+## Logs:
 $(kubectl logs -n kube-system -l name=sealed-secrets-controller --tail=50 2>&1)
 
-## All secrets in kube-system:
+## Secrets:
 $(kubectl get secrets -n kube-system 2>&1)
 EOF
-      echo -e "${YELLOW}📝 Información de debug guardada en sealed-secrets-debug.txt${NC}"
+      echo -e "${YELLOW}📝 Debug info en sealed-secrets-debug.txt${NC}"
     fi
   fi
 }
 
-# Ejecutar la función de backup
 create_sealed_secrets_backup
 
 # --------------------------------------------
-# 18. MONITOREO DE APLICACIONES
+# 17. VERIFICAR ESTADO APLICACIONES
 # --------------------------------------------
-echo -e "${BLUE}\n📊 Monitoreando sincronización de aplicaciones...${NC}"
+echo -e "${BLUE}\n📊 Verificando estado de aplicaciones...${NC}"
+sleep 15
 
-# Función para verificar estado de app
 check_app_status() {
     local app_name=$1
     local status=$(kubectl get application $app_name -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "NotFound")
     local health=$(kubectl get application $app_name -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
-    echo "  $app_name: Sync=$status, Health=$health"
+    echo -n -e "${YELLOW}${app_name}:${NC} "
+    [ "$status" = "Synced" ] && echo -n -e "${GREEN}Sync=${status}${NC}, " || echo -n -e "${RED}Sync=${status}${NC}, "
+    [ "$health" = "Healthy" ] && echo -e "${GREEN}Health=${health}${NC}" || echo -e "${RED}Health=${health}${NC}"
+    
+    if [ "$status" != "Synced" ] || [ "$health" != "Healthy" ]; then
+      kubectl get application $app_name -n argocd -o jsonpath='{.status.conditions}' | jq -r '.[] | select(.type == "ComparisonError" or .type == "ReconciliationError") | .message'
+    fi
 }
 
-# Verificar aplicaciones si existen
-if kubectl get applications -n argocd >/dev/null 2>&1; then
-  echo -e "${YELLOW}Estado de aplicaciones ArgoCD:${NC}"
-  kubectl get applications -n argocd --no-headers | while read app rest; do
-    check_app_status $app
-  done
-else
-  echo -e "${YELLOW}No hay aplicaciones ArgoCD desplegadas aún${NC}"
-fi
+for app in "${APPS[@]}"; do
+  app_name=$(basename "$app" .yaml)
+  if kubectl get application "$app_name" -n argocd >/dev/null 2>&1; then
+    check_app_status "$app_name"
+  else
+    echo -e "${RED}❌ $app_name no encontrada${NC}"
+  fi
+done
 
 # --------------------------------------------
-# 19. MENSAJE FINAL
+# 18. MENSAJE FINAL
 # --------------------------------------------
-echo -e "${GREEN}\n🚀 GITOPS + SEALED SECRETS CONFIGURADO EXITOSAMENTE${NC}"
-echo -e "${GREEN}\n💡 Resumen de lo configurado:${NC}"
-echo -e "${YELLOW}✅ Minikube iniciado y configurado${NC}"
-echo -e "${YELLOW}✅ Sealed Secrets Controller instalado${NC}"
-echo -e "${YELLOW}✅ Namespaces creados: dev, test, prod${NC}"
-echo -e "${YELLOW}✅ Sealed Secrets generados y aplicados${NC}"
-echo -e "${YELLOW}✅ ArgoCD instalado y funcionando${NC}"
+echo -e "${GREEN}\n🚀 CONFIGURACIÓN COMPLETADA${NC}"
+echo -e "${GREEN}\n💡 Resumen:${NC}"
+echo -e "${YELLOW}✅ ${#APPS[@]} aplicaciones desplegadas${NC}"
+echo -e "${YELLOW}✅ Minikube configurado${NC}"
+echo -e "${YELLOW}✅ Sealed Secrets instalado${NC}"
+echo -e "${YELLOW}✅ ArgoCD funcionando${NC}"
 
 echo -e "${GREEN}\n🔗 Accesos:${NC}"
-echo -e "${YELLOW}👉 ArgoCD UI: https://localhost:8080${NC}"
-echo -e "${YELLOW}👉 Usuario: admin | Contraseña: mostrada arriba ⬆️${NC}"
-echo -e "${YELLOW}👉 Minikube Dashboard: minikube dashboard${NC}"
+echo -e "${YELLOW}👉 ArgoCD: https://localhost:8080${NC}"
+echo -e "${YELLOW}👉 Usuario: admin | Contraseña arriba ⬆️${NC}"
 
-echo -e "${GREEN}\n🔒 Archivos importantes:${NC}"
-echo -e "${YELLOW}📁 sealed-secrets/*/  - Archivos Sealed Secrets (COMMITEAR)${NC}"
-echo -e "${YELLOW}🔑 sealed-secrets-cert.pem - Clave pública (NO commitear)${NC}"
-echo -e "${YELLOW}💾 sealed-secrets-private-key-backup.yaml - Backup clave privada (GUARDAR SEGURO)${NC}"
+echo -e "${GREEN}\n🔍 Comandos útiles:${NC}"
+echo -e "${YELLOW}   kubectl get applications -n argocd${NC}"
+echo -e "${YELLOW}   argocd app list${NC}"
 
-echo -e "${GREEN}\n🎯 Próximos pasos:${NC}"
-echo -e "${YELLOW}1. Actualizar los valores en los sealed secrets con datos reales${NC}"
-echo -e "${YELLOW}2. Commitear los archivos sealed-secrets/* al repositorio${NC}"
-echo -e "${YELLOW}3. Configurar las aplicaciones ArgoCD${NC}"
-echo -e "${YELLOW}4. ¡Hacer push y ver la magia del GitOps!${NC}"
-
-echo -e "${GREEN}\n🔄 Port-forward activo con PID: $PORT_FORWARD_PID${NC}"
-echo -e "${YELLOW}Para detenerlo: kill $PORT_FORWARD_PID${NC}"
+echo -e "${GREEN}\n🔄 Port-forward PID: $PORT_FORWARD_PID${NC}"
+echo -e "${YELLOW}Para detener: kill $PORT_FORWARD_PID${NC}"
