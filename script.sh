@@ -77,7 +77,7 @@ done
 # --------------------------------------------
 # 7. Acceso a ArgoCD (reemplaza Port Forward por LoadBalancer)
 # --------------------------------------------
-ARGO_LB=$(kubectl get svc argocd-server -n argocd -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+ARGO_LB=$(kubectl port-forward svc/argocd-server -n argocd 8080:443)
 echo -e "${GREEN}\n🔗 Acceso a ArgoCD: https://$ARGO_LB${NC}"
 
 echo -e "${YELLOW}🔑 Usuario: admin${NC}"
