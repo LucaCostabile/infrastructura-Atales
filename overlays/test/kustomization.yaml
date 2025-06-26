@@ -1,8 +1,0 @@
-namespace: test
-
-resources:
-  - ../../base
-  - namespace.yaml
-
-patchesStrategicMerge:
-  - configmap-backend.yaml

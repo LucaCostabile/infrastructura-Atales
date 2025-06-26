@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: backend-config
-data:
-  EMAIL_FROM: "atalmendoza03@gmail.com"
-  FRONTEND_HOST: "frontend-service"
-  FRONTEND_PORT: "30080"
