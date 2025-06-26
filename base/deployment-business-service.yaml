@@ -25,7 +25,7 @@ spec:
             - configMapRef:
                 name: backend-config
             - secretRef:
-                name: backend-secrets
+                name: negocio-secrets
           resources:
             limits:
               memory: "256Mi"

@@ -64,6 +64,6 @@ spec:
             - configMapRef:
                 name: backend-config
             - secretRef:
-                name: backend-secrets
+                name: gateway-secrets
       restartPolicy: Always
 
