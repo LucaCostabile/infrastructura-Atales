@@ -9,9 +9,6 @@ metadata:
     service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-path: "/"
     service.beta.kubernetes.io/aws-load-balancer-healthcheck-port: "80"
-    
-    # Opcional: Si quieres usar las mismas subredes que el LB que funciona
-    service.beta.kubernetes.io/aws-load-balancer-subnets: "subnet-0f6cacddf6ba06962,subnet-0725b942016f462d2"
 spec:
   type: LoadBalancer
   selector:
