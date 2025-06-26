@@ -2,34 +2,24 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backend-config
+  namespace: test
 data:
-  # Configuración común para todos los servicios
   DB_HOST: "atalesdb.crxuvzgv6rwg.us-east-1.rds.amazonaws.com"
   DB_NAME: "atalesdb"
   NODE_ENV: "test"
-  
-  # Configuración específica de puertos
   API_GATEWAY_PORT: "3000"
   AUTH_SERVICE_PORT: "3001"
   BUSINESS_SERVICE_PORT: "3002"
   MYSQL_PORT: "3306"
-  
-  # Configuración para el API Gateway
-  FRONTEND_URL: "http://frontend-service.dev.svc.cluster.local" # Usando DNS interno de Kubernetes
-  CORS_ALLOWED_ORIGINS: "http://localhost:3000,https://atales.local,http://192.168.49.2"
-  RATE_LIMIT_WINDOW_MS: "900000" # 15 minutos en ms
+  FRONTEND_URL: "http://frontend-service.test.svc.cluster.local"
+  CORS_ALLOWED_ORIGINS: "http://localhost:3000,https://atales.local,http://192.168.49.2,http://k8s-test-frontend-*.elb.us-east-1.amazonaws.com"
+  RATE_LIMIT_WINDOW_MS: "900000"
   RATE_LIMIT_MAX_REQUESTS: "1000"
-  AUTH_RATE_LIMIT_WINDOW_MS: "60000" # 1 minuto en ms
+  AUTH_RATE_LIMIT_WINDOW_MS: "60000"
   AUTH_RATE_LIMIT_MAX_REQUESTS: "100"
-  
-  # Timeouts (en milisegundos)
-  PROXY_TIMEOUT: "30000" # 30 segundos
-  HEALTH_CHECK_TIMEOUT: "5000" # 5 segundos
-  
-  # Configuración de logs
-  LOG_LEVEL: "info"
+  PROXY_TIMEOUT: "30000"
+  HEALTH_CHECK_TIMEOUT: "5000"
+  LOG_LEVEL: "debug"  # Cambiado a debug para mejor troubleshooting
   LOG_FORMAT: "combined"
-  
-  # Configuración de reintentos para conexión a DB
   DB_CONNECTION_RETRIES: "5"
-  DB_RETRY_DELAY: "5000" # 5 segundos
+  DB_RETRY_DELAY: "5000"
