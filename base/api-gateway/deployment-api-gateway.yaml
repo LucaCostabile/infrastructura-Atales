@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: luca011/api-gateway-atales:test-v1.0.1
+          image: luca011/api-gateway-atales:test-v1.0.2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
