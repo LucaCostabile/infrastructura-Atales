@@ -1,9 +1,9 @@
 #!/bin/bash
-# 🚀 Script GitOps para AWS EKS - Entorno TEST
+# 🚀 Script GitOps para AWS EKS - Entorno TEST (con input seguro para DB)
 
 set -e
 
-# 🎨 Colores para logs bonitos
+# 🎨 Colores
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
@@ -13,7 +13,17 @@ NC='\033[0m'
 echo -e "${GREEN}\n🌥️ INICIANDO DESPLIEGUE EN AWS EKS - TEST${NC}"
 
 # --------------------------------------------
-# 1. Verificar Conexión con el Cluster EKS
+# 🔐 Pedir datos sensibles por input
+# --------------------------------------------
+read -p "🔑 Ingrese DB_USER: " DB_USER
+read -s -p "🔑 Ingrese DB_PASSWORD: " DB_PASSWORD
+echo ""
+read -p "🔑 Ingrese DB_HOST (ej: atalesdb.xxxxx.rds.amazonaws.com): " DB_HOST
+
+echo -e "${GREEN}✅ Credenciales ingresadas${NC}"
+
+# --------------------------------------------
+# 1. Verificar conexión al Cluster
 # --------------------------------------------
 echo -e "${BLUE}🔍 Verificando acceso a EKS...${NC}"
 if ! kubectl cluster-info > /dev/null 2>&1; then
@@ -24,7 +34,7 @@ else
 fi
 
 # --------------------------------------------
-# 2. Instalar Sealed Secrets Controller (si no está)
+# 2. Sealed Secrets Controller
 # --------------------------------------------
 echo -e "${BLUE}\n🔒 Verificando Sealed Secrets...${NC}"
 if ! kubectl get deployment sealed-secrets-controller -n kube-system > /dev/null 2>&1; then
@@ -36,7 +46,7 @@ else
 fi
 
 # --------------------------------------------
-# 3. Crear Namespace TEST (si no existe)
+# 3. Namespace
 # --------------------------------------------
 NAMESPACE="test"
 echo -e "${BLUE}📦 Verificando namespace $NAMESPACE...${NC}"
@@ -50,11 +60,11 @@ fi
 # --------------------------------------------
 # 4. Aplicar Sealed Secrets
 # --------------------------------------------
-echo -e "${BLUE}\n🔑 Aplicando Sealed Secrets para $NAMESPACE...${NC}"
+echo -e "${BLUE}\n🔑 Aplicando Sealed Secrets...${NC}"
 kubectl apply -k sealed-secrets/$NAMESPACE/
 
 # --------------------------------------------
-# 5. Instalar ArgoCD (si no está)
+# 5. Instalar ArgoCD
 # --------------------------------------------
 echo -e "${BLUE}\n🚀 Verificando ArgoCD...${NC}"
 if ! kubectl get ns argocd > /dev/null 2>&1; then
@@ -75,17 +85,54 @@ for app in argo-apps/*; do
 done
 
 # --------------------------------------------
-# 7. Acceso a ArgoCD (reemplaza Port Forward por LoadBalancer)
+# 7. Crear entrada en /etc/hosts
 # --------------------------------------------
-ARGO_LB=$(kubectl port-forward svc/argocd-server -n argocd 8080:443)
-echo -e "${GREEN}\n🔗 Acceso a ArgoCD: https://$ARGO_LB${NC}"
+echo -e "${BLUE}\n🌐 Configurando /etc/hosts...${NC}"
 
+FRONTEND_LB=$(kubectl get svc frontend-service -n test -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+
+if [ -z "$FRONTEND_LB" ]; then
+  echo -e "${RED}❌ No se encontró el LoadBalancer del frontend. Asegurate que esté creado.${NC}"
+else
+  if grep -q "atales.localaws" /etc/hosts; then
+    sudo sed -i "/atales.localaws/c\\$FRONTEND_LB atales.localaws" /etc/hosts
+    echo -e "${YELLOW}🟡 Entrada en /etc/hosts actualizada${NC}"
+  else
+    echo "$FRONTEND_LB atales.localaws" | sudo tee -a /etc/hosts > /dev/null
+    echo -e "${GREEN}✅ Entrada agregada en /etc/hosts: atales.localaws${NC}"
+  fi
+fi
+
+# --------------------------------------------
+# 8. Port-forward ArgoCD
+# --------------------------------------------
+echo -e "${YELLOW}\n🚪 Habilitando acceso a ArgoCD con port-forward...${NC}"
+pkill -f "kubectl port-forward.*argocd-server" 2>/dev/null || true
+sleep 2
+kubectl port-forward svc/argocd-server -n argocd 8080:443 > /dev/null 2>&1 &
+PORT_FORWARD_PID=$!
+sleep 3
+
+echo -e "${GREEN}\n🔗 Acceso a ArgoCD: https://localhost:8080${NC}"
 echo -e "${YELLOW}🔑 Usuario: admin${NC}"
 echo -e "${YELLOW}🔑 Contraseña:${NC}"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 # --------------------------------------------
-# 8. Fin del Script
+# 9. Crear DB en RDS
+# --------------------------------------------
+echo -e "${BLUE}\n🗄️ Creando base de datos 'atalesdb' en RDS...${NC}"
+
+kubectl run mysql-client --rm -i --tty --image=mysql:8.0 --restart=Never -- bash -c \
+"mysql -h $DB_HOST -u$DB_USER -p$DB_PASSWORD -e 'CREATE DATABASE IF NOT EXISTS atalesdb;'"
+
+echo -e "${GREEN}✅ Base de datos 'atalesdb' verificada o creada${NC}"
+
+# --------------------------------------------
+# 10. Fin
 # --------------------------------------------
 echo -e "${GREEN}\n🚀 DESPLIEGUE COMPLETO EN EKS - TEST${NC}"
+echo -e "${GREEN}✅ Acceso frontend: http://atales.localaws${NC}"
+echo -e "${GREEN}✅ Acceso ArgoCD: https://localhost:8080${NC}"
+echo -e "${YELLOW}Para detener port-forward: kill $PORT_FORWARD_PID${NC}"
 

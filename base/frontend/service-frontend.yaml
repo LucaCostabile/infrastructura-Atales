@@ -2,12 +2,13 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend-service
+  namespace: test
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: frontend
   ports:
     - name: http
       port: 80
       targetPort: 80
-      nodePort: 30080  # Puerto accesible externamente
+
