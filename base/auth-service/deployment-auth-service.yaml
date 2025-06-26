@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: luca011/auth-service-atales:dev-latest
+          image: luca011/auth-service-atales:test-latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3001
