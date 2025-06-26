@@ -2,6 +2,5 @@ namespace: dev
 
 resources:
   - ../../base
-  - ../../sealed-secrets/dev
   - ingress.yaml
 
