@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: luca011/frontend-atales:latest
+          image: luca011/frontend-atales:v1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 80
