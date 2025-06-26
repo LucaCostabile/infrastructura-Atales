@@ -2,10 +2,6 @@ namespace: dev
 
 resources:
   - ../../base
-  - ../../secrets/dev/auth-secrets.yaml
-  - ../../secrets/dev/negocio-secrets.yaml
-  - ../../secrets/dev/gateway-secrets.yaml
-  - ../../secrets/dev/frontend-secrets.yaml
-
+  - ../../secrets/dev
   - ingress.yaml
 
