@@ -1,0 +1,11 @@
+namespace: prod
+
+resources:
+  - ../../base
+  - ../../base/external-secrets
+  - namespace.yaml
+  - ingress.yaml
+  - letsencrypt-prod.yaml
+
+patchesStrategicMerge:
+  - configmap-backend.yaml

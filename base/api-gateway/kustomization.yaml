@@ -1,0 +1,5 @@
+resources:
+  - deployment-api-gateway.yaml
+  - service-api-gateway.yaml
+  - configmap-backend.yaml
+  - hpa-backend.yaml
