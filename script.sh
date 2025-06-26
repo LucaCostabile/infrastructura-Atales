@@ -1,5 +1,5 @@
 #!/bin/bash
-# 🚀 Script GitOps Actualizado - Multi-app Argo CD + Sealed Secrets
+# 🚀 Script GitOps Actualizado - Solo usa Secrets existentes
 set -e
 
 # 🎨 Colores
@@ -132,7 +132,7 @@ echo -e "${GREEN}✅ Clave pública guardada${NC}"
 cleanup_existing_secrets() {
   echo -e "${BLUE}\n🧹 Limpiando secrets existentes...${NC}"
   
-  PROBLEMATIC_SECRETS=("backend-secrets" "gateway-secrets" "negocio-secrets" "frontend-secrets")
+  PROBLEMATIC_SECRETS=("backend-secrets" "gateway-secrets" "negocio-secrets" "frontend-tls")
   
   for env in dev test prod; do
     echo -e "${YELLOW}📁 Namespace: $env${NC}"
@@ -152,85 +152,36 @@ cleanup_existing_secrets() {
 }
 
 # --------------------------------------------
-# 8. GENERAR SEALED SECRETS INICIALES
+# 8. VERIFICAR SECRETS EXISTENTES
 # --------------------------------------------
-generate_initial_sealed_secrets() {
-  echo -e "${BLUE}\n🔐 Generando Sealed Secrets...${NC}"
+verify_existing_secrets() {
+  echo -e "${BLUE}\n🔍 Verificando archivos Sealed Secrets existentes...${NC}"
   
-  mkdir -p sealed-secrets/{dev,test,prod}
+  REQUIRED_SECRETS=(
+    "auth-sealed-secrets.yaml"
+    "frontend-sealed-secrets.yaml"
+    "gateway-sealed-secrets.yaml"
+    "negocio-sealed-secrets.yaml"
+  )
   
   for env in dev test prod; do
     echo -e "${YELLOW}📦 Ambiente: $env${NC}"
     
-    # Auth Service Secrets
-    if [ ! -f "sealed-secrets/$env/auth-sealed-secrets.yaml" ]; then
-      echo -e "${YELLOW}🟡 Generando auth-sealed-secrets.yaml...${NC}"
-      
-      if [ "$env" == "dev" ]; then
-        DB_PASSWORD="dev-password-123"
-        JWT_SECRET_KEY="dev-jwt-secret-456"
+    missing_secrets=0
+    
+    for secret_file in "${REQUIRED_SECRETS[@]}"; do
+      if [ ! -f "sealed-secrets/$env/$secret_file" ]; then
+        echo -e "${RED}❌ Falta archivo: sealed-secrets/$env/$secret_file${NC}"
+        missing_secrets=$((missing_secrets + 1))
       else
-        DB_PASSWORD=$(openssl rand -hex 16)
-        JWT_SECRET_KEY=$(openssl rand -hex 32)
+        echo -e "${GREEN}✅ Archivo presente: $secret_file${NC}"
       fi
-      
-      kubectl create secret generic backend-secrets \
-        --namespace=$env \
-        --from-literal=CRYPTO_SECRET="$(openssl rand -hex 32)" \
-        --from-literal=DB_PASSWORD="$DB_PASSWORD" \
-        --from-literal=DB_USER="atales_user" \
-        --from-literal=GMAIL_APP_PASSWORD="" \
-        --from-literal=GMAIL_USER="atales@example.com" \
-        --from-literal=JWT_SECRET_KEY="$JWT_SECRET_KEY" \
-        --dry-run=client -o yaml | \
-      kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/auth-sealed-secrets.yaml"
-    fi
+    done
     
-    # Frontend TLS Secrets
-    if [ ! -f "sealed-secrets/$env/frontend-sealed-secrets.yaml" ]; then
-      echo -e "${YELLOW}🟡 Generando frontend-sealed-secrets.yaml...${NC}"
-      
-      if [ "$env" == "dev" ]; then
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-          -keyout /tmp/tls.key \
-          -out /tmp/tls.crt \
-          -subj "/CN=atales.local/O=Atales Dev" 2>/dev/null
-        
-        kubectl create secret tls frontend-tls \
-          --namespace=$env \
-          --cert=/tmp/tls.crt \
-          --key=/tmp/tls.key \
-          --dry-run=client -o yaml | \
-        kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/frontend-sealed-secrets.yaml"
-        
-        rm -f /tmp/tls.key /tmp/tls.crt
-      else
-        echo -e "${RED}❌ Necesitas certificados reales para $env${NC}"
-      fi
-    fi
-    
-    # Gateway Secrets
-    if [ ! -f "sealed-secrets/$env/gateway-sealed-secrets.yaml" ]; then
-      echo -e "${YELLOW}🟡 Generando gateway-sealed-secrets.yaml...${NC}"
-      
-      kubectl create secret generic gateway-secrets \
-        --namespace=$env \
-        --from-literal=API_KEY="$(openssl rand -hex 16)" \
-        --from-literal=SECRET_TOKEN="$(openssl rand -hex 32)" \
-        --dry-run=client -o yaml | \
-      kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/gateway-sealed-secrets.yaml"
-    fi
-    
-    # Business Service Secrets
-    if [ ! -f "sealed-secrets/$env/negocio-sealed-secrets.yaml" ]; then
-      echo -e "${YELLOW}🟡 Generando negocio-sealed-secrets.yaml...${NC}"
-      
-      kubectl create secret generic negocio-secrets \
-        --namespace=$env \
-        --from-literal=BUSINESS_API_KEY="$(openssl rand -hex 16)" \
-        --from-literal=BUSINESS_SECRET="$(openssl rand -hex 32)" \
-        --dry-run=client -o yaml | \
-      kubeseal --cert sealed-secrets-cert.pem -o yaml > "sealed-secrets/$env/negocio-sealed-secrets.yaml"
+    if [ $missing_secrets -gt 0 ]; then
+      echo -e "${RED}🚨 Error: Faltan $missing_secrets archivos de secrets para el ambiente $env${NC}"
+      echo -e "${YELLOW}Por favor, crea los archivos necesarios en sealed-secrets/$env/ antes de continuar${NC}"
+      exit 1
     fi
   done
 }
@@ -263,30 +214,27 @@ EOF
 }
 
 # --------------------------------------------
-# 10. GENERAR/APLICAR SEALED SECRETS
+# 10. APLICAR SEALED SECRETS EXISTENTES
 # --------------------------------------------
-if [ ! -d "sealed-secrets" ] || [ -z "$(ls -A sealed-secrets 2>/dev/null)" ]; then
+apply_existing_secrets() {
+  echo -e "${BLUE}\n🚀 Aplicando Sealed Secrets existentes...${NC}"
+  
+  verify_existing_secrets
   cleanup_existing_secrets
-  generate_initial_sealed_secrets
   generate_kustomization_files
-else
-  echo -e "${GREEN}✅ Sealed secrets ya existen${NC}"
-  cleanup_existing_secrets
-fi
-
-echo -e "${BLUE}\n🚀 Aplicando Sealed Secrets...${NC}"
-for env in dev test prod; do
-  if [ -f "sealed-secrets/$env/kustomization.yaml" ]; then
+  
+  for env in dev test prod; do
+    echo -e "${YELLOW}📦 Aplicando secrets para $env...${NC}"
     kubectl apply -k sealed-secrets/$env/
-  else
-    kubectl apply -f sealed-secrets/$env/ 2>/dev/null || true
-  fi
-done
+  done
+}
+
+apply_existing_secrets
 
 # --------------------------------------------
-# 11. VERIFICAR SECRETS
+# 11. VERIFICAR SECRETS EN CLUSTER
 # --------------------------------------------
-echo -e "${BLUE}\n🔍 Verificando secrets...${NC}"
+echo -e "${BLUE}\n🔍 Verificando secrets en cluster...${NC}"
 sleep 10
 
 EXPECTED_SECRETS=("backend-secrets" "gateway-secrets" "negocio-secrets" "frontend-tls")
@@ -458,8 +406,7 @@ done
 echo -e "${GREEN}\n🚀 CONFIGURACIÓN COMPLETADA${NC}"
 echo -e "${GREEN}\n💡 Resumen:${NC}"
 echo -e "${YELLOW}✅ ${#APPS[@]} aplicaciones desplegadas${NC}"
-echo -e "${YELLOW}✅ Minikube configurado${NC}"
-echo -e "${YELLOW}✅ Sealed Secrets instalado${NC}"
+echo -e "${YELLOW}✅ Secrets existentes aplicados correctamente${NC}"
 echo -e "${YELLOW}✅ ArgoCD funcionando${NC}"
 
 echo -e "${GREEN}\n🔗 Accesos:${NC}"
