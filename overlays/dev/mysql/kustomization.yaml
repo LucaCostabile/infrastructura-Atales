@@ -1,6 +1,6 @@
 namespace: dev
 
 resources:
-  - ../../base/mysql
+  - ../../../base/mysql
   - ingress.yaml
 

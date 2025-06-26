@@ -1,5 +1,5 @@
 namespace: dev
 
 resources:
-  - ../../base/auth-service
+  - ../../../base/auth-service
 

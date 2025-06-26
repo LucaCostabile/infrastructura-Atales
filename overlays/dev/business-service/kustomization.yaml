@@ -1,5 +1,5 @@
 namespace: dev
 
 resources:
-  - ../../base/business-service
+  - ../../../base/business-service
 
