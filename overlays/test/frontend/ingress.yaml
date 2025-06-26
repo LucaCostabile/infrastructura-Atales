@@ -4,10 +4,10 @@ metadata:
   name: atales-ingress
   namespace: test
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "false"  # No redirige HTTP→HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
 spec:
   rules:
-  - host: atales.localaws  # Elegí cualquier nombre, después lo explico
+  - host: "k8s-test-frontend-9abb939853-6bdd0eff757619c0.elb.us-east-1.amazonaws.com"  # Usa el DNS real de tu LB
     http:
       paths:
       - path: /api
@@ -24,4 +24,3 @@ spec:
             name: frontend-service
             port:
               number: 80
-
