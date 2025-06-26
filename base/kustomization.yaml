@@ -1,0 +1,10 @@
+resources:
+  - deployment-backend.yaml
+  - deployment-frontend.yaml
+ #- deployment-mysql.yaml
+  - service-backend.yaml
+  - service-frontend.yaml
+  #- service-mysql.yaml
+  #- pvc-mysql.yaml
+  - configmap-backend.yaml
+  - hpa-backend.yaml

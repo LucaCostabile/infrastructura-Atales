@@ -1,0 +1,10 @@
+namespace: dev
+
+resources:
+  - ../../base
+  - namespace.yaml
+  - ingress.yaml
+  - letsencrypt-prod.yaml
+
+patchesStrategicMerge:
+  - configmap-backend.yaml
