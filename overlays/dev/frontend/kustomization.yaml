@@ -3,8 +3,10 @@ kind: Kustomization
 
 resources:
   - ../../base/frontend
-  - ingress.yaml
 
 images:
   - name: luca011/frontend-atales
-    newTag: dev-20250627005625
+    newTag: dev-202406261600
+
+patches:
+  - path: ingress.yaml
