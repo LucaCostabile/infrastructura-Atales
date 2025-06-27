@@ -6,7 +6,7 @@ resources:
 
 images:
   - name: luca011/frontend-atales
-    newTag: dev-latest    # <-- Esto lo actualiza el CI con cada build
+    newTag: dev-20250627005422
 
 patches:
   - ingress.yaml
