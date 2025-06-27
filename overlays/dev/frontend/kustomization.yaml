@@ -6,7 +6,7 @@ resources:
 
 images:
   - name: luca011/frontend-atales
-    newTag: dev-20250627005422
+    newTag: dev-20250627005440
 
 patches:
   - ingress.yaml
