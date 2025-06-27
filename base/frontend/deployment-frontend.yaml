@@ -15,7 +15,7 @@ spec:
       containers:
       - name: frontend
         image: luca011/frontend-atales:dev-latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 80
         - containerPort: 443
