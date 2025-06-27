@@ -1,6 +1,12 @@
-namespace: dev
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
 
 resources:
-  - ../../../base/frontend
-  - ingress.yaml
+  - ../../base/frontend
 
+images:
+  - name: luca011/frontend-atales
+    newTag: dev-latest
+
+patchesStrategicMerge:
+  - ingress.yaml
