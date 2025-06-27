@@ -7,4 +7,4 @@ resources:
 
 images:
   - name: luca011/frontend-atales
-    newTag: dev-202406261540
+    newTag: dev-20250627005625
