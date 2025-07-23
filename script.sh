@@ -39,19 +39,38 @@ else
 fi
 
 # --------------------------------------------
-# 3. INSTALAR SEALED SECRETS CONTROLLER
+# 3. INSTALAR SEALED SECRETS CONTROLLER (MODIFICADO)
 # --------------------------------------------
 echo -e "${BLUE}\n🔒 Verificando instalación de Sealed Secrets...${NC}"
-if ! kubectl get deployment sealed-secrets-controller -n kube-system > /dev/null 2>&1; then
-  echo -e "${YELLOW}🟡 Instalando Sealed Secrets Controller...${NC}"
-  kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
+
+# PRIMERO: Verificar si existe backup de clave privada
+if [ -f "sealed-secrets-private-key-backup.yaml" ]; then
+  echo -e "${YELLOW}🔄 Restaurando clave privada desde backup...${NC}"
   
-  echo -e "${BLUE}⏳ Esperando que Sealed Secrets esté listo...${NC}"
-  kubectl wait --for=condition=Ready pod -l name=sealed-secrets-controller -n kube-system --timeout=300s
-  sleep 30
+  # Eliminar instalación existente si hay
+  kubectl delete -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml --ignore-not-found > /dev/null 2>&1 || true
+  
+  # Aplicar el backup
+  kubectl apply -f sealed-secrets-private-key-backup.yaml -n kube-system > /dev/null 2>&1
+  
+  # Instalar controller (usará la clave restaurada)
+  echo -e "${YELLOW}🟡 Instalando Sealed Secrets Controller con clave restaurada...${NC}"
+  kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml > /dev/null 2>&1
+  
+  echo -e "${GREEN}✅ Clave privada restaurada desde backup${NC}"
 else
-  echo -e "${GREEN}✅ Sealed Secrets Controller ya está instalado${NC}"
+  # Flujo normal si no hay backup
+  if ! kubectl get deployment sealed-secrets-controller -n kube-system > /dev/null 2>&1; then
+    echo -e "${YELLOW}🟡 Instalando Sealed Secrets Controller...${NC}"
+    kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
+  else
+    echo -e "${GREEN}✅ Sealed Secrets Controller ya está instalado${NC}"
+  fi
 fi
+
+echo -e "${BLUE}⏳ Esperando que Sealed Secrets esté listo...${NC}"
+kubectl wait --for=condition=Ready pod -l name=sealed-secrets-controller -n kube-system --timeout=300s > /dev/null 2>&1
+sleep 10
 
 # --------------------------------------------
 # 4. INSTALAR KUBESEAL CLI
@@ -69,10 +88,10 @@ if ! command -v kubeseal &> /dev/null; then
     armv7l) ARCH="arm" ;;
   esac
   
-  wget "https://github.com/bitnami-labs/sealed-secrets/releases/download/v${KUBESEAL_VERSION}/kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz"
-  tar -xvzf "kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz"
-  sudo install -m 755 kubeseal /usr/local/bin/kubeseal
-  rm -f "kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz" kubeseal
+  wget "https://github.com/bitnami-labs/sealed-secrets/releases/download/v${KUBESEAL_VERSION}/kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz" > /dev/null 2>&1
+  tar -xvzf "kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz" > /dev/null 2>&1
+  sudo install -m 755 kubeseal /usr/local/bin/kubeseal > /dev/null 2>&1
+  rm -f "kubeseal-${KUBESEAL_VERSION}-${OS}-${ARCH}.tar.gz" kubeseal > /dev/null 2>&1
   echo -e "${GREEN}✅ kubeseal CLI instalado${NC}"
 else
   echo -e "${GREEN}✅ kubeseal CLI ya está instalado${NC}"
@@ -251,7 +270,7 @@ else
 fi
 
 echo -e "${BLUE}\n⏳ Esperando que ArgoCD esté listo...${NC}"
-kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd
+kubectl wait --for=condition=available --timeout=300s deployment/argocd-server -n argocd > /dev/null 2>&1
 
 # --------------------------------------------
 # 13. ELIMINAR APLICACIÓN ANTIGUA
@@ -302,38 +321,40 @@ echo -e "${GREEN}\n🔑 Contraseña ArgoCD (admin):${NC}"
 kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath="{.data.password}" | base64 -d; echo
 
 # --------------------------------------------
-# 16. BACKUP CLAVE PRIVADA
+# 16. BACKUP CLAVE PRIVADA (MODIFICADO)
 # --------------------------------------------
 create_sealed_secrets_backup() {
   echo -e "${BLUE}\n💾 Creando backup de clave privada...${NC}"
   
-  POSSIBLE_SECRET_NAMES=(
-    "sealed-secrets-key"
-    "sealed-secrets-controller"
-    "sealed-secrets-tls"
-  )
-  
-  SECRET_FOUND=false
-  
-  for secret_name in "${POSSIBLE_SECRET_NAMES[@]}"; do
-    if kubectl get secret "$secret_name" -n kube-system >/dev/null 2>&1; then
-      kubectl get secret "$secret_name" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
-      echo -e "${GREEN}✅ Backup guardado${NC}"
-      SECRET_FOUND=true
-      break
-    fi
-  done
-  
-  if [ "$SECRET_FOUND" = false ]; then
-    SEALED_SECRETS=$(kubectl get secrets -n kube-system --no-headers | grep -i sealed | awk '{print $1}' || true)
+  # Solo crear backup si no existe uno previo
+  if [ ! -f "sealed-secrets-private-key-backup.yaml" ]; then
+    POSSIBLE_SECRET_NAMES=(
+      "sealed-secrets-key"
+      "sealed-secrets-controller"
+      "sealed-secrets-tls"
+    )
     
-    if [ -n "$SEALED_SECRETS" ]; then
-      FIRST_SECRET=$(echo "$SEALED_SECRETS" | head -n1)
-      kubectl get secret "$FIRST_SECRET" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
-      echo -e "${GREEN}✅ Backup guardado (secret alternativo)${NC}"
-    else
-      echo -e "${RED}❌ No se encontró el secret${NC}"
-      cat > sealed-secrets-debug.txt << EOF
+    SECRET_FOUND=false
+    
+    for secret_name in "${POSSIBLE_SECRET_NAMES[@]}"; do
+      if kubectl get secret "$secret_name" -n kube-system >/dev/null 2>&1; then
+        kubectl get secret "$secret_name" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
+        echo -e "${GREEN}✅ Backup guardado${NC}"
+        SECRET_FOUND=true
+        break
+      fi
+    done
+    
+    if [ "$SECRET_FOUND" = false ]; then
+      SEALED_SECRETS=$(kubectl get secrets -n kube-system --no-headers | grep -i sealed | awk '{print $1}' || true)
+      
+      if [ -n "$SEALED_SECRETS" ]; then
+        FIRST_SECRET=$(echo "$SEALED_SECRETS" | head -n1)
+        kubectl get secret "$FIRST_SECRET" -n kube-system -o yaml > "sealed-secrets-private-key-backup.yaml"
+        echo -e "${GREEN}✅ Backup guardado (secret alternativo)${NC}"
+      else
+        echo -e "${RED}❌ No se encontró el secret${NC}"
+        cat > sealed-secrets-debug.txt << EOF
 # Debug info
 $(date)
 
@@ -349,8 +370,11 @@ $(kubectl logs -n kube-system -l name=sealed-secrets-controller --tail=50 2>&1)
 ## Secrets:
 $(kubectl get secrets -n kube-system 2>&1)
 EOF
-      echo -e "${YELLOW}📝 Debug info en sealed-secrets-debug.txt${NC}"
+        echo -e "${YELLOW}📝 Debug info en sealed-secrets-debug.txt${NC}"
+      fi
     fi
+  else
+    echo -e "${YELLOW}✅ Backup ya existe, omitiendo creación${NC}"
   fi
 }
 
