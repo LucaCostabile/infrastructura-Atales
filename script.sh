@@ -47,15 +47,37 @@ echo -e "${BLUE}\n🔒 Verificando instalación de Sealed Secrets...${NC}"
 if [ -f "sealed-secrets-private-key-backup.yaml" ]; then
   echo -e "${YELLOW}🔄 Restaurando clave privada desde backup...${NC}"
   
-  # Eliminar instalación existente si hay
+# Eliminar instalación existente si hay
   kubectl delete -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml --ignore-not-found > /dev/null 2>&1 || true
   
-  # Aplicar el backup
-  kubectl apply -f sealed-secrets-private-key-backup.yaml -n kube-system > /dev/null 2>&1
-  
-  # Instalar controller (usará la clave restaurada)
+ echo -e "${YELLOW}🗑️  Eliminando secret existente de Sealed Secrets...${NC}"
+SECRET_NAME=$(grep 'name:' sealed-secrets-private-key-backup.yaml | head -n1 | awk '{print $2}')
+kubectl delete secret "$SECRET_NAME" -n kube-system --ignore-not-found
+
+echo -e "${YELLOW}♻️ Aplicando backup de clave privada...${NC}"
+kubectl apply -f sealed-secrets-private-key-backup.yaml -n kube-system
+
+  if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Error al aplicar backup de clave privada${NC}"
+    exit 1
+  fi
+
   echo -e "${YELLOW}🟡 Instalando Sealed Secrets Controller con clave restaurada...${NC}"
-  kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml > /dev/null 2>&1
+  kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/download/v0.24.0/controller.yaml
+  if [ $? -ne 0 ]; then
+    echo -e "${RED}❌ Error al instalar el Sealed Secrets Controller${NC}"
+    exit 1
+  fi
+
+  echo -e "${BLUE}⏳ Esperando que Sealed Secrets esté listo tras restaurar clave...${NC}"
+  kubectl wait --for=condition=Ready pod -l name=sealed-secrets-controller -n kube-system --timeout=300s || {
+    echo -e "${RED}❌ El controlador no quedó listo tras la restauración${NC}"
+    echo -e "${YELLOW}📝 Mostrando logs del pod...${NC}"
+    kubectl logs -n kube-system -l name=sealed-secrets-controller --tail=50
+    exit 1
+  }
+  sleep 10
+
   
   echo -e "${GREEN}✅ Clave privada restaurada desde backup${NC}"
 else
