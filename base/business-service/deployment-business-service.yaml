@@ -23,7 +23,7 @@ spec:
               name: http
           envFrom:
             - configMapRef:
-                name: backend-config
+                name: backend-config-business-service
             - secretRef:
                 name: negocio-secrets
           resources:
