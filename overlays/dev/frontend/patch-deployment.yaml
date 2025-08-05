@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: luca011/frontend-atales:dev-latest  # CI/CD reemplaza esto
+          image: luca011/frontend-atales:dev-v2-20250805033517
           env:
             - name: NODE_ENV
               value: "development"
