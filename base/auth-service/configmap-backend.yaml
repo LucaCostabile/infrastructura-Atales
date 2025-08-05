@@ -22,4 +22,3 @@ data:
   LOG_FORMAT: "combined"
   DB_CONNECTION_RETRIES: "5"
   DB_RETRY_DELAY: "5000"
-"
