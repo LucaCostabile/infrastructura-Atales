@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: luca011/auth-service-atales:dev-v2-20250805200118
+          image: luca011/auth-service-atales:dev-v2-20250805201315
           env:
             - name: NODE_ENV
               value: "development"
