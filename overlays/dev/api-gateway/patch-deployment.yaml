@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  template:
+    spec:
+      containers:
+        - name: api-gateway
+          image: luca011/api-gateway-atales:dev-latest  # CI/CD reemplaza esto
+          env:
+            - name: NODE_ENV
+              value: "development"
+            - name: DEBUG
+              value: "true"
+

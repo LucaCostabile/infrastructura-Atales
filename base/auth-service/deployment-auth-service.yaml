@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: luca011/auth-service-atales:dev-20250803200400
+          image: luca011/auth-service-atales:latest  # Tag genérico, lo sobreescribe overlay
           imagePullPolicy: Always
           ports:
             - containerPort: 3001

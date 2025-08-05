@@ -1,5 +1,6 @@
-namespace: dev
-
 resources:
   - ../../../base/frontend
   - ingress.yaml
+
+patchesStrategicMerge:
+  - patch-deployment.yaml

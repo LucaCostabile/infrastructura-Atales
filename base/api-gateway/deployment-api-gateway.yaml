@@ -24,7 +24,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: luca011/api-gateway-atales:dev-20250804003446
+          image: luca011/api-gateway-atales:latest  # Tag genérico
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -40,30 +40,16 @@ spec:
             httpGet:
               path: /api/health
               port: 3000
-              httpHeaders:
-                - name: User-Agent
-                  value: kube-probe/liveness
             initialDelaySeconds: 30
             periodSeconds: 15
-            timeoutSeconds: 5
-            failureThreshold: 3
-            successThreshold: 1
           readinessProbe:
             httpGet:
               path: /api/health
               port: 3000
-              httpHeaders:
-                - name: User-Agent
-                  value: kube-probe/readiness
             initialDelaySeconds: 10
             periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
-            successThreshold: 1
           envFrom:
             - configMapRef:
                 name: backend-config
             - secretRef:
                 name: gateway-secrets
-      restartPolicy: Always
-

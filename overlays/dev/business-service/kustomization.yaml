@@ -1,5 +1,6 @@
-namespace: dev
-
 resources:
   - ../../../base/business-service
+
+patchesStrategicMerge:
+  - patch-deployment.yaml
 

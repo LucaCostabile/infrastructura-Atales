@@ -1,5 +1,4 @@
 resources:
+  - configmap-backend.yaml
   - deployment-auth-service.yaml
   - service-auth-service.yaml
-  - configmap-backend.yaml
-
