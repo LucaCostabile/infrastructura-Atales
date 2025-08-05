@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: business-service
-          image: luca011/business-service-atales:dev-latest  # CI/CD reemplaza esto
+          image: luca011/negocio-service-atales:dev-v2-20250805033719
           env:
             - name: NODE_ENV
               value: "development"
