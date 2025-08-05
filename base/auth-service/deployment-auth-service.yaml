@@ -23,7 +23,7 @@ spec:
               name: http
           envFrom:
             - configMapRef:
-                name: backend-config
+                name: backend-config-auth-service
             - secretRef:
                 name: backend-secrets
           resources:
