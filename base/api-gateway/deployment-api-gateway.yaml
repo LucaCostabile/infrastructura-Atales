@@ -50,6 +50,6 @@ spec:
             periodSeconds: 10
           envFrom:
             - configMapRef:
-                name: backend-config
+                name: backend-config-api-gateway
             - secretRef:
                 name: gateway-secrets
