@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: luca011/frontend-atales:dev-v2-20250805033517
+          image: luca011/frontend-atales:dev-v2-20250805155350
           env:
             - name: NODE_ENV
               value: "development"
