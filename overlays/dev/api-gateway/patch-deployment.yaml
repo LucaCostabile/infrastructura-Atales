@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: api-gateway
-          image: luca011/api-gateway-atales:dev-v2-20250805154923
+          image: luca011/api-gateway-atales:dev-v2-20250805194601
           env:
             - name: NODE_ENV
               value: "development"
