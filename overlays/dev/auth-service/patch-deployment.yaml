@@ -7,7 +7,7 @@ spec:
     spec:
       containers:
         - name: auth-service
-          image: luca011/auth-service-atales:dev-latest  # CI/CD reemplaza esto
+          image: luca011/auth-service-atales:dev-v2-20250805032958
           env:
             - name: NODE_ENV
               value: "development"
